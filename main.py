@@ -1,4 +1,6 @@
 import PySimpleGUI as sg
+import scraper
+import parser
 
 VERSION = '1.0.0'
 TITLE = f'Fixtures Excel Exporter Tool (FEET) v{VERSION}'
@@ -50,9 +52,6 @@ LAYOUT = [[
 
 def handle_window():
     """Create the window and handle its events
-
-    Returns:
-        None
 
     """
     window = sg.Window(TITLE, LAYOUT, resizable=False)
@@ -109,4 +108,11 @@ def handle_window():
 
 
 if __name__ == '__main__':
-    handle_window()
+    competition_html = scraper.get_html(scraper.COMPETITIONS_URL)
+    grades_url = scraper.get_grades_url(competition_html)
+    grades_html = scraper.get_html(grades_url)
+    grade_urls = scraper.get_grade_urls(grades_html)
+    grade_htmls = scraper.get_htmls_with_js(grade_urls)
+    if grade_htmls is not None:
+        roster = parser.create_roster(grade_htmls)
+        print(roster)
