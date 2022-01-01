@@ -1,9 +1,9 @@
-from roster import *
 from bs4 import BeautifulSoup
 from datetime import datetime
+from roster import *
 
 
-def format_grade(grade):
+def _format_grade(grade):
     """Formats a grade into its abbreviated form
 
     Args:
@@ -20,7 +20,7 @@ def format_grade(grade):
     return grade[age_start:age_end] + grade[section_start:section_end]
 
 
-def get_grade(grade_html):
+def _get_grade(grade_html):
     """Gets the grade from a grade html string
 
     Args:
@@ -32,38 +32,25 @@ def get_grade(grade_html):
     """
     soup = BeautifulSoup(grade_html, 'html.parser')
     grade = soup.find('h2', class_='sc-kEqYlL sc-1hg285i-0 eoUoDK hALyVo').text
-    return format_grade(grade)
+    return _format_grade(grade)
 
 
-def format_date(date):
-    """Formats a date into its desired format
-
-    Args:
-        date(str): The date to format
-
-    Returns:
-        str: The formatted date
-
-    """
-    return datetime.strptime(date, '%A, %d %B %Y').strftime('%d/%m/%Y')
-
-
-def get_date(grade_html):
+def _get_date(grade_html):
     """Gets the date from a grade html string
 
     Args:
         grade_html(str): The grade HTML string
 
     Returns:
-        str: The date
+        datetime: The date
 
     """
     soup = BeautifulSoup(grade_html, 'html.parser')
-    date = soup.find('span', class_='sc-kEqYlL jndYxC').text
-    return format_date(date)
+    date_string = soup.find('span', class_='sc-kEqYlL jndYxC').text
+    return datetime.strptime(date_string, '%A, %d %B %Y')
 
 
-def get_teams(grade_html):
+def _get_teams(grade_html):
     """Gets the teams from a grade html string
 
     Args:
@@ -79,7 +66,7 @@ def get_teams(grade_html):
     return [team.text for team in teams]
 
 
-def get_time_location_htmls(grade_html):
+def _get_time_location_htmls(grade_html):
     """Gets the HTML strings for the elements that hold the time and location information
 
     Args:
@@ -94,42 +81,29 @@ def get_time_location_htmls(grade_html):
     return [str(time_location_element) for time_location_element in time_location_elements]
 
 
-def format_time(time):
-    """Formats a time to remove the 'AM/PM' component
-
-    Args:
-        time(str): The time to format
-
-    Returns:
-        str: The formatted time
-
-    """
-    end = time.find(' ')
-    return time[:end]
-
-
-def get_times(grade_html):
+def _get_times(grade_html):
     """Gets the times from a grade html string
 
     Args:
         grade_html(str): The grade HTML string
 
     Returns:
-        list(str): The times
+        list(datetime): The times
 
     """
     times = []
 
-    time_location_htmls = get_time_location_htmls(grade_html)
+    time_location_htmls = _get_time_location_htmls(grade_html)
     for time_location_html in time_location_htmls:
         soup = BeautifulSoup(time_location_html, 'html.parser')
-        time = soup.find('span', class_='sc-kEqYlL kjKiYr').text
-        times.append(format_time(time))
+        time_string = soup.find('span', class_='sc-kEqYlL kjKiYr').text
+        time = datetime.strptime(time_string, '%I:%M %p')
+        times.append(time)
 
     return times
 
 
-def get_location_court_strings(grade_html):
+def _get_location_court_strings(grade_html):
     """Gets the strings that contain the location and court information from a grade html string
 
     Args:
@@ -144,7 +118,7 @@ def get_location_court_strings(grade_html):
     return [location_court_element.text for location_court_element in location_court_elements]
 
 
-def get_locations(location_court_strings):
+def _get_locations(location_court_strings):
     """Gets the locations from a list of location/court strings
 
     Args:
@@ -164,14 +138,14 @@ def get_locations(location_court_strings):
     return locations
 
 
-def get_courts(location_court_strings):
+def _get_courts(location_court_strings):
     """Gets the courts from a list of location/court strings
 
     Args:
         location_court_strings(list(str)): The list of location/court strings
 
     Returns:
-        list(str): The courts
+        list(Court): The courts
 
     """
     courts = []
@@ -179,13 +153,13 @@ def get_courts(location_court_strings):
     for location_court_string in location_court_strings:
         search_term = 'Court'
         start = location_court_string.find(search_term) + len(search_term) + 1
-        court = location_court_string[start:]
-        courts.append(court)
+        court = int(location_court_string[start:])
+        courts.append(Court.from_num(court))
 
     return courts
 
 
-def create_matches(grade_html):
+def _create_matches(grade_html):
     """Gets the matches from a grade html string
 
     Args:
@@ -197,12 +171,13 @@ def create_matches(grade_html):
     """
     matches = []
 
-    teams = get_teams(grade_html)
-    times = get_times(grade_html)
+    grade = _get_grade(grade_html)
+    teams = _get_teams(grade_html)
+    times = _get_times(grade_html)
 
-    location_court_strings = get_location_court_strings(grade_html)
-    locations = get_locations(location_court_strings)
-    courts = get_courts(location_court_strings)
+    location_court_strings = _get_location_court_strings(grade_html)
+    locations = _get_locations(location_court_strings)
+    courts = _get_courts(location_court_strings)
 
     for i in range(len(teams) // 2):
         team1 = teams[i * 2]
@@ -210,13 +185,13 @@ def create_matches(grade_html):
         time = times[i]
         location = locations[i]
         court = courts[i]
-        match = Match(team1, team2, time, location, court)
+        match = Match(grade, team1, team2, time, location, court)
         matches.append(match)
 
     return matches
 
 
-def create_round(grade_html):
+def _create_round(grade_html):
     """Creates a Round object from a grade html string
 
     Args:
@@ -226,10 +201,8 @@ def create_round(grade_html):
         Round: The created Round object
 
     """
-    grade = get_grade(grade_html)
-    date = get_date(grade_html)
-    matches = create_matches(grade_html)
-    round_ = Round(grade, date, matches)
+    matches = _create_matches(grade_html)
+    round_ = Round(matches)
     return round_
 
 
@@ -245,9 +218,10 @@ def create_roster(grade_htmls):
     """
     rounds = []
 
+    date = _get_date(grade_htmls[0])
     for grade_html in grade_htmls:
-        round_ = create_round(grade_html)
+        round_ = _create_round(grade_html)
         rounds.append(round_)
 
-    roster = Roster(rounds)
+    roster = Roster(date, rounds)
     return roster

@@ -1,13 +1,14 @@
 from enum import Enum
+from collections import defaultdict
 
 
 class Location(Enum):
     """Represents the location that a match can take place at
 
     """
-    KING_CLUB = 1,
-    PARKDALE = 2,
-    MENTONE_GRAMMAR = 3,
+    KING_CLUB = 1
+    PARKDALE = 2
+    MENTONE_GRAMMAR = 3
     MENTONE_GIRLS = 4
 
     @classmethod
@@ -40,11 +41,45 @@ class Location(Enum):
         return self.name.replace('_', ' ').title()
 
 
+class Court(Enum):
+    """Represents the court that a match can take place on
+
+    """
+    COURT_1 = 1
+    COURT_2 = 2
+    COURT_3 = 3
+    COURT_4 = 4
+
+    @classmethod
+    def from_num(cls, num):
+        """Converts a court's number into a Court enum value
+
+        Args:
+            num(int): The court's number
+
+        Returns:
+            Court: The resulting Court enum value
+
+        """
+        if num == cls.COURT_1.value:
+            return cls.COURT_1
+        if num == cls.COURT_2.value:
+            return cls.COURT_2
+        if num == cls.COURT_3.value:
+            return cls.COURT_3
+        if num == cls.COURT_4.value:
+            return cls.COURT_4
+
+    def __str__(self):
+        return self.name.replace('_', ' ').title()
+
+
 class Match:
     """Represents a match between two teams
 
     """
-    def __init__(self, team1, team2, time, location, court):
+    def __init__(self, grade, team1, team2, time, location, court):
+        self.grade = grade
         self.team1 = team1
         self.team2 = team2
         self.time = time
@@ -56,9 +91,7 @@ class Round:
     """Represents a round of matches
 
     """
-    def __init__(self, grade, date, matches):
-        self.grade = grade
-        self.date = date
+    def __init__(self, matches):
         self.matches = matches
 
 
@@ -66,27 +99,42 @@ class Roster:
     """Represents a roster of rounds
 
     """
-    def __init__(self, rounds):
+    def __init__(self, date, rounds):
+        self.date = date
         self.rounds = rounds
 
-    def __str__(self):
-        """Converts a roster into a string, mainly for debugging purposes
+    @classmethod
+    def _insert_match_in_order(cls, match, matches):
+        """Inserts a Match object into a list of matches in order based on the match time
 
-        Returns:
-            str: the Roster as a string
+        Args:
+            match(Match): The Match object to insert
+            matches(list(Match)): The matches
 
         """
-        string = '\n\n'
-        for round_ in self.rounds:
-            string += f'Grade - {round_.grade}:\n'
-            string += f'Date - {round_.date}:\n'
-            string += f'Matches:\n'
-            for match in round_.matches:
-                string += f'\t{match.team1} vs {match.team2}:\n'
-                string += f'\t\tTime - {match.time}\n'
-                string += f'\t\tLocation - {match.location}\n'
-                string += f'\t\tCourt - {match.court}\n'
-            string += '\n'
-        string += '\n\n'
+        if len(matches) == 0:
+            matches.append(match)
+        else:
+            for i, curr_match in zip(range(len(matches)), matches):
+                if match.time < curr_match.time:
+                    matches.insert(i, match)
+                    break
+                else:
+                    if i == len(matches) - 1:
+                        matches.append(match)
 
-        return string
+    def to_dictionary(self):
+        """Converts the roster object into a dictionary
+
+        Returns:
+            defaultdict: The roster object as a dictionary
+
+        """
+        data = defaultdict(lambda: defaultdict(list))
+
+        data['Date'] = self.date
+        for round_ in self.rounds:
+            for match in round_.matches:
+                Roster._insert_match_in_order(match, data[match.location][match.court])
+
+        return data
