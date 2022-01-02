@@ -138,3 +138,14 @@ def create_excel(roster, template_location, save_location):
     filename = date.strftime('%d{} %b %Y').format(_ordinal(date)).lstrip('0') + '.xlsx'
     wb.save(f'{save_location}/{filename}')
     wb.close()
+
+
+def update_excel(roster, excel_location):
+    """Updates an Excel document with a new roster
+
+    Args:
+        roster(Roster): The new roster to update the Excel document with
+        excel_location(str): The location of the Excel document to update
+
+    """
+    pass

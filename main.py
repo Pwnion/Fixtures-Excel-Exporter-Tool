@@ -1,117 +1,191 @@
-import PySimpleGUI as sg
+import os
+import sys
+import subprocess
 
+from threading import Thread
+from window import *
 from scraper import get_all_grade_htmls
 from parser import create_roster
-from export import create_excel
+from export import create_excel, update_excel
 
-_VERSION = '1.0.0'
-_TITLE = f'Fixtures Excel Exporter Tool (FEET) v{_VERSION}'
-_TEMPLATE_ROW_1 = [
-    sg.Text('Template Document:', size=(18, 1)),
-    sg.In(key='-TEMPLATE DOCUMENT TEXT-', size=(60, 1), disabled=True, enable_events=True),
-    sg.FileBrowse(file_types=(('Excel Documents', '*.xlsx'),))
-]
-_OUTPUT_ROW_1 = [
-    sg.Text('Output Folder:', size=(18, 1)),
-    sg.In(key='-OUTPUT FOLDER TEXT-', size=(60, 1), disabled=True, enable_events=True),
-    sg.FolderBrowse()
-]
-_SYNC_ROW_2 = [
-    sg.Text('Document to Sync:', size=(18, 1)),
-    sg.In(key='-SYNC DOCUMENT TEXT-', size=(60, 1), disabled=True, enable_events=True),
-    sg.FileBrowse(file_types=(('Excel Documents', '*.xlsx'),))
-]
-_COLUMN_1 = [
-    _TEMPLATE_ROW_1,
-    _OUTPUT_ROW_1
-]
-_COLUMN_2 = [
-    _SYNC_ROW_2
-]
-_TAB_GROUP_ROW = [
-    sg.TabGroup([[
-        sg.Tab('Create', [[sg.Column(_COLUMN_1, pad=15)]], expand_x=True, expand_y=True),
-        sg.Tab('Sync', [[sg.Column(_COLUMN_2, pad=30)]], expand_x=True, expand_y=True)
-    ]], key='-TAB GROUP-', tab_location='center', enable_events=True)
-]
-_PROCESS_ROW = [
-    sg.Button('Process', key='-PROCESS BUTTON-', size=(10, 2), disabled=True)
-]
-_COLUMN = [
-    _TAB_GROUP_ROW,
-    _PROCESS_ROW
-]
-_LAYOUT = [[
-    sg.Column(
-        _COLUMN,
-        element_justification='center',
-        vertical_alignment='center',
-        expand_x=True,
-        expand_y=True
-    )
-]]
+
+def _create_roster():
+    """Creates the roster
+
+    Returns:
+        Roster: The created roster
+
+    """
+    # Scrape the fixtures page
+    grade_htmls = get_all_grade_htmls()
+
+    update_progress('Parsing the data into an Excel document...', 92)
+
+    # Parse the data into a Roster object
+    roster = create_roster(grade_htmls)
+
+    return roster
+
+
+def _complete_loading():
+    """Handles the progress bar reaching 100%
+
+    """
+    update_progress('Done!', 100)
+    WINDOW.size = (WINDOW_WIDTH, PROGRESS_WINDOW_HEIGHT_WITH_OPTIONS)
+    progress_options_column = WINDOW[PROGRESS_OPTIONS_KEY]
+    progress_options_column.update(visible=True)
+
+
+def _create(values):
+    """Creates the Excel document
+
+    Args:
+        values(dict(str: str)): The window values
+
+    """
+    # Create the roster
+    roster = _create_roster()
+
+    # Get template location and output folder location from window values
+    template_location = values[TEMPLATE_DOCUMENT_KEY]
+    output_folder_location = values[OUTPUT_FOLDER_KEY]
+
+    # Create the Excel document
+    create_excel(roster, template_location, output_folder_location)
+
+    _complete_loading()
+
+
+def _update(values):
+    """Update a previously created Excel document
+
+    Args:
+        values(dict(str: str)): Window values
+
+    """
+    # Create the roster
+    roster = _create_roster()
+
+    # Get the location of Excel document to update
+    excel_location = values[UPDATE_DOCUMENT_KEY]
+
+    # Update the Excel document
+    update_excel(roster, excel_location)
+
+
+def _switch_to_progress_layout():
+    """Switch to the progress layout
+
+    """
+    # Change which layout and elements are visible
+    main_column = WINDOW[MAIN_COLUMN_KEY]
+    progress_column = WINDOW[PROGRESS_COLUMN_KEY]
+    progress_options_column = WINDOW[PROGRESS_OPTIONS_KEY]
+    main_column.update(visible=not main_column.visible)
+    progress_column.update(visible=not progress_column.visible)
+    if main_column.visible:
+        progress_options_column.update(visible=not progress_options_column.visible)
+
+    # Change the window height and ensure it stays at the same location
+    window_x, window_y = WINDOW.current_location()
+    WINDOW.size = (WINDOW_WIDTH, MAIN_WINDOW_HEIGHT if main_column.visible else PROGRESS_WINDOW_HEIGHT)
+    WINDOW.move(window_x, window_y)
+
+
+def _restart_program():
+    """Restart the program
+
+    """
+    os.execl(sys.executable, f'"{sys.executable}"', *sys.argv)
 
 
 def _handle_window():
     """Create the window and handle its events
 
     """
-    window = sg.Window(_TITLE, _LAYOUT, resizable=False)
-
     # Get the window elements that transcend tabs
-    tab_group = window['-TAB GROUP-']
-    process_button = window['-PROCESS BUTTON-']
+    tab_group = WINDOW[TAB_GROUP_KEY]
+    process_button = WINDOW[PROCESS_BUTTON_KEY]
 
     # State variables
     curr_tab = None
     process_button_enabled_1 = False
     process_button_enabled_2 = False
+    driver = None
 
     # Event Loop
     while True:
-        event, values = window.read()
-        if event == sg.WIN_CLOSED or event == 'Exit':
+        # Handle the window being closed
+        event, values = WINDOW.read()
+        if event == sg.WIN_CLOSED or event == WINDOW_EXIT_EVENT:
+            # If the window is closed and a driver is still active, quit it
+            if driver is not None:
+                driver.quit()
+
             break
 
+        # Receive events from a running thread
+        if 'THREAD' in event:
+            # Receive progress updates
+            if event == THREAD_PROGRESS_EVENT:
+                progress = values[THREAD_PROGRESS_EVENT]
+                WINDOW[PROGRESS_TEXT_KEY].update(progress[0])
+                WINDOW[PROGRESS_BAR_KEY].update(progress[1])
+
+            # Receive a driver to quit if the thread is killed while it's active
+            if event == THREAD_DRIVER_EVENT:
+                driver = values[THREAD_DRIVER_EVENT]
+
+            continue
+
+        # Receive events from the progress window
+        if 'PROGRESS' in event:
+            if event == PROGRESS_EXPLORER_BUTTON_KEY:
+                subprocess.Popen(f'explorer "{values[OUTPUT_FOLDER_KEY]}"')
+            if event == PROGRESS_RESTART_BUTTON_KEY:
+                _restart_program()
+            if event == PROGRESS_EXIT_BUTTON_KEY:
+                break
+
+            continue
+
         # Get the currently selected tab
-        if event == '-TAB GROUP-':
+        if event == TAB_GROUP_KEY:
             curr_tab = tab_group.get()
 
         # Handle each tab differently
-        if curr_tab == 'Create':
+        if curr_tab == TAB_1:
             # Get the text from the elements on the 'Create' tab
-            template_document_text = window['-TEMPLATE DOCUMENT TEXT-'].get()
-            output_folder_text = window['-OUTPUT FOLDER TEXT-'].get()
+            template_document_text = WINDOW[TEMPLATE_DOCUMENT_KEY].get()
+            output_folder_text = WINDOW[OUTPUT_FOLDER_KEY].get()
 
             # Determine whether the process button should be enabled
-            if event == '-TEMPLATE DOCUMENT TEXT-' or event == '-OUTPUT FOLDER TEXT-':
+            if event == TEMPLATE_DOCUMENT_KEY or event == OUTPUT_FOLDER_KEY:
                 if not process_button_enabled_1 and template_document_text and output_folder_text:
                     process_button.update(disabled=False)
                     process_button_enabled_1 = True
-            elif event == '-TAB GROUP-':
+            elif event == TAB_GROUP_KEY:
                 process_button.update(disabled=not process_button_enabled_1)
-            elif event == '-PROCESS BUTTON-':
-                # Scrape the fixtures page, parse the data and create an Excel document
-                grade_htmls = get_all_grade_htmls()
-                roster = create_roster(grade_htmls)
-                template_location = values['-TEMPLATE DOCUMENT TEXT-']
-                output_folder_location = values['-OUTPUT FOLDER TEXT-']
-                create_excel(roster, template_location, output_folder_location)
-        elif curr_tab == 'Sync':
+            elif event == PROCESS_BUTTON_KEY:
+                _switch_to_progress_layout()
+                Thread(target=_create, args=(values,), daemon=True).start()
+        elif curr_tab == TAB_2:
             # Get the text from the element on the 'Sync' tab
-            sync_document_text = window['-SYNC DOCUMENT TEXT-'].get()
+            sync_document_text = WINDOW[UPDATE_DOCUMENT_KEY].get()
 
             # Determine whether the process button should be enabled
-            if event == '-SYNC DOCUMENT TEXT-':
+            if event == UPDATE_DOCUMENT_KEY:
                 if not process_button_enabled_2 and sync_document_text:
                     process_button.update(disabled=False)
                     process_button_enabled_2 = True
-            elif event == '-TAB GROUP-':
+            elif event == TAB_GROUP_KEY:
                 process_button.update(disabled=not process_button_enabled_2)
-            elif event == '-PROCESS BUTTON-':
-                pass
+            elif event == PROCESS_BUTTON_KEY:
+                _switch_to_progress_layout()
+                Thread(target=_update, args=(values,), daemon=True).start()
 
-    window.close()
+    WINDOW.close()
 
 
 if __name__ == '__main__':
