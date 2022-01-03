@@ -7,13 +7,17 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from window import update_progress, update_driver
+from window import update_progress, update_driver, update_error
 
+# URL constants
 _DOMAIN = 'https://www.playhq.com'
 _COMPETITIONS_URL = _DOMAIN + '/basketball-victoria/org/southern-basketball-association/e1cbc3e3'
 
+# The timeout value in seconds for loading a page (excluding js)
+_PAGE_LOAD_TIMEOUT = 15
+
 # The timeout value in seconds for loading javascript on a webpage
-_JS_LOAD_TIMEOUT = 10
+_JS_LOAD_TIMEOUT = 5
 
 
 def _get_html(url):
@@ -108,7 +112,9 @@ def _get_htmls_with_js(urls):
     """
     htmls = []
 
-    driver = webdriver.Chrome()
+    # Initialise chrome driver
+    driver = webdriver.Chrome('driver/chromedriver')
+    driver.set_page_load_timeout(_PAGE_LOAD_TIMEOUT)
     update_driver(driver)
 
     # Position the window off the screen, so it's not visible
@@ -147,10 +153,10 @@ def _get_htmls_with_js(urls):
             driver.get(urls[i])
             try:
                 htmls.append(_wait_for_html(driver))
-            except TimeoutException:
+            except TimeoutException as e:
                 driver.quit()
                 update_driver(None)
-                return None
+                raise e
 
     driver.quit()
     update_driver(None)

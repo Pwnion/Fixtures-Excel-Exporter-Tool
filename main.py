@@ -17,24 +17,22 @@ def _create_roster():
 
     """
     # Scrape the fixtures page
-    grade_htmls = get_all_grade_htmls()
+    try:
+        grade_htmls = get_all_grade_htmls()
+    except Exception as e:
+        update_error(f'Could not scrape all required information from webpages\n\nException: {str(e)}')
+        raise e
 
     update_progress('Parsing the data into an Excel document...', 92)
 
     # Parse the data into a Roster object
-    roster = create_roster(grade_htmls)
+    try:
+        roster = create_roster(grade_htmls)
+    except Exception as e:
+        update_error(f'Could not create roster\n\nException: {str(e)}')
+        raise e
 
     return roster
-
-
-def _complete_loading():
-    """Handles the progress bar reaching 100%
-
-    """
-    update_progress('Done!', 100)
-    WINDOW.size = (WINDOW_WIDTH, PROGRESS_WINDOW_HEIGHT_WITH_OPTIONS)
-    progress_options_column = WINDOW[PROGRESS_OPTIONS_KEY]
-    progress_options_column.update(visible=True)
 
 
 def _create(values):
@@ -52,9 +50,14 @@ def _create(values):
     output_folder_location = values[OUTPUT_FOLDER_KEY]
 
     # Create the Excel document
-    create_excel(roster, template_location, output_folder_location)
+    try:
+        create_excel(roster, template_location, output_folder_location)
+    except Exception as e:
+        update_error(f'Could not parse data into an Excel document\n\nException: {str(e)}')
+        raise e
 
-    _complete_loading()
+    update_progress('Done!', 100)
+    show_progress_options()
 
 
 def _update(values):
@@ -73,24 +76,8 @@ def _update(values):
     # Update the Excel document
     update_excel(roster, excel_location)
 
-
-def _switch_to_progress_layout():
-    """Switch to the progress layout
-
-    """
-    # Change which layout and elements are visible
-    main_column = WINDOW[MAIN_COLUMN_KEY]
-    progress_column = WINDOW[PROGRESS_COLUMN_KEY]
-    progress_options_column = WINDOW[PROGRESS_OPTIONS_KEY]
-    main_column.update(visible=not main_column.visible)
-    progress_column.update(visible=not progress_column.visible)
-    if main_column.visible:
-        progress_options_column.update(visible=not progress_options_column.visible)
-
-    # Change the window height and ensure it stays at the same location
-    window_x, window_y = WINDOW.current_location()
-    WINDOW.size = (WINDOW_WIDTH, MAIN_WINDOW_HEIGHT if main_column.visible else PROGRESS_WINDOW_HEIGHT)
-    WINDOW.move(window_x, window_y)
+    update_progress('Done!', 100)
+    show_progress_options()
 
 
 def _restart_program():
@@ -124,6 +111,17 @@ def _handle_window():
                 driver.quit()
 
             break
+
+        # Receive errors
+        if event == ERROR_EVENT:
+            if driver is not None:
+                driver.quit()
+                driver = None
+
+            WINDOW[PROGRESS_BAR_KEY].update(bar_color=('#8b0000', '#8b0000'))
+            update_progress('Error!', 100)
+            show_progress_options(error=True)
+            continue
 
         # Receive events from a running thread
         if 'THREAD' in event:
@@ -168,21 +166,23 @@ def _handle_window():
             elif event == TAB_GROUP_KEY:
                 process_button.update(disabled=not process_button_enabled_1)
             elif event == PROCESS_BUTTON_KEY:
-                _switch_to_progress_layout()
+                # Switch to the progress layout and start creating the Excel document
+                switch_to_progress_layout()
                 Thread(target=_create, args=(values,), daemon=True).start()
         elif curr_tab == TAB_2:
-            # Get the text from the element on the 'Sync' tab
-            sync_document_text = WINDOW[UPDATE_DOCUMENT_KEY].get()
+            # Get the text from the element on the 'Update' tab
+            update_document_text = WINDOW[UPDATE_DOCUMENT_KEY].get()
 
             # Determine whether the process button should be enabled
             if event == UPDATE_DOCUMENT_KEY:
-                if not process_button_enabled_2 and sync_document_text:
+                if not process_button_enabled_2 and update_document_text:
                     process_button.update(disabled=False)
                     process_button_enabled_2 = True
             elif event == TAB_GROUP_KEY:
                 process_button.update(disabled=not process_button_enabled_2)
             elif event == PROCESS_BUTTON_KEY:
-                _switch_to_progress_layout()
+                # Switch to the progress layout and start updating the Excel document
+                switch_to_progress_layout()
                 Thread(target=_update, args=(values,), daemon=True).start()
 
     WINDOW.close()

@@ -19,6 +19,7 @@ PROGRESS_RESTART_BUTTON_KEY = '-PROGRESS RESTART BUTTON-'
 PROGRESS_EXIT_BUTTON_KEY = '-PROGRESS EXIT BUTTON-'
 THREAD_PROGRESS_EVENT = '-THREAD PROGRESS-'
 THREAD_DRIVER_EVENT = '-THREAD DRIVER-'
+ERROR_EVENT = '-ERROR-'
 WINDOW_EXIT_EVENT = 'Exit'
 TAB_1 = 'Create'
 TAB_2 = 'Update'
@@ -117,6 +118,47 @@ _TITLE = f'Fixtures Excel Exporter Tool (FEET) v{_VERSION}'
 WINDOW = sg.Window(_TITLE, _LAYOUT, size=(WINDOW_WIDTH, MAIN_WINDOW_HEIGHT), resizable=False)
 
 
+def change_window_height(height):
+    """Changes the window height, making sure it doesn't move
+
+    Args:
+        height(int): The new window height
+
+    """
+    window_x, window_y = WINDOW.current_location()
+    WINDOW.size = (WINDOW_WIDTH, height)
+    WINDOW.move(window_x, window_y)
+
+
+def switch_to_progress_layout():
+    """Switch to the progress layout
+
+    """
+    # Change which layout and elements are visible
+    main_column = WINDOW[MAIN_COLUMN_KEY]
+    progress_column = WINDOW[PROGRESS_COLUMN_KEY]
+    main_column.update(visible=False)
+    progress_column.update(visible=True)
+
+    # Change the window height
+    change_window_height(PROGRESS_WINDOW_HEIGHT)
+
+
+def show_progress_options(error=False):
+    """Shows the progress options
+
+    Args:
+        error(bool): Whether an error occurred that halted the progress bar
+
+    """
+    if error:
+        WINDOW[PROGRESS_EXPLORER_BUTTON_KEY].update(disabled=True)
+
+    progress_options_column = WINDOW[PROGRESS_OPTIONS_KEY]
+    progress_options_column.update(visible=True)
+    change_window_height(PROGRESS_WINDOW_HEIGHT_WITH_OPTIONS)
+
+
 def update_progress(info, value):
     """Sends an event to the window with progress information
 
@@ -136,3 +178,13 @@ def update_driver(driver):
 
     """
     WINDOW.write_event_value(THREAD_DRIVER_EVENT, driver)
+
+
+def update_error(error_msg):
+    """Sends an event to the window with an error message
+
+    Args:
+        error_msg(str): The error message to send
+
+    """
+    WINDOW.write_event_value(ERROR_EVENT, error_msg)
