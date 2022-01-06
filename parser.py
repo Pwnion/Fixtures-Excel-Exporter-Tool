@@ -3,6 +3,21 @@ from datetime import datetime
 from roster import *
 
 
+def _get_date(grade_html):
+    """Gets the date from a grade html string
+
+    Args:
+        grade_html(str): The grade HTML string
+
+    Returns:
+        datetime: The date
+
+    """
+    soup = BeautifulSoup(grade_html, 'html.parser')
+    date_string = soup.find('span', class_='sc-kEqYlL jndYxC').text
+    return datetime.strptime(date_string, '%A, %d %B %Y')
+
+
 def _format_grade(grade):
     """Formats a grade into its abbreviated form
 
@@ -35,21 +50,6 @@ def _get_grade(grade_html):
     return _format_grade(grade)
 
 
-def _get_date(grade_html):
-    """Gets the date from a grade html string
-
-    Args:
-        grade_html(str): The grade HTML string
-
-    Returns:
-        datetime: The date
-
-    """
-    soup = BeautifulSoup(grade_html, 'html.parser')
-    date_string = soup.find('span', class_='sc-kEqYlL jndYxC').text
-    return datetime.strptime(date_string, '%A, %d %B %Y')
-
-
 def _get_teams(grade_html):
     """Gets the teams from a grade html string
 
@@ -62,7 +62,25 @@ def _get_teams(grade_html):
     """
     soup = BeautifulSoup(grade_html, 'html.parser')
     matches_element = soup.find('ul', class_='sc-10c3c88-4 iEXxNO')
-    teams = matches_element.find_all('a', class_='sc-kEqYlL sc-10c3c88-13 gYjcIn johWCg')
+    all_teams = matches_element.find_all('a', class_='sc-kEqYlL sc-10c3c88-13 gYjcIn johWCg')
+
+    # Filter out forfeited matches
+    teams = []
+    for i in range(len(all_teams) // 2):
+        skip = False
+        teams_to_add = []
+        for j in range(2):
+            team = all_teams[i * 2 + j]
+            if team.find_next_sibling('span', class_='sc-kEqYlL kTltqj') is not None:
+                skip = True
+                break
+            teams_to_add.append(team)
+
+        if skip:
+            continue
+
+        teams.extend(teams_to_add)
+
     return [team.text for team in teams]
 
 
@@ -218,6 +236,7 @@ def create_roster(grade_htmls):
     """
     rounds = []
 
+    # Check if the date is correct
     date = _get_date(grade_htmls[0])
     for grade_html in grade_htmls:
         round_ = _create_round(grade_html)

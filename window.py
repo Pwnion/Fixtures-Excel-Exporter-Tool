@@ -1,5 +1,9 @@
 import PySimpleGUI as sg
 
+from threading import Event
+from queue import Queue
+
+# Window constants
 WINDOW_WIDTH = 760
 MAIN_WINDOW_HEIGHT = 200
 PROGRESS_WINDOW_HEIGHT = 100
@@ -14,16 +18,26 @@ PROGRESS_COLUMN_KEY = '-PROGRESS COLUMN-'
 PROGRESS_TEXT_KEY = '-PROGRESS TEXT-'
 PROGRESS_BAR_KEY = '-PROGRESS BAR-'
 PROGRESS_OPTIONS_KEY = '-PROGRESS OPTIONS COLUMN-'
-PROGRESS_EXPLORER_BUTTON_KEY = '-PROGRESS EXPLORER BUTTON-'
+PROGRESS_UTILITY_BUTTON_KEY = '-PROGRESS UTILITY BUTTON-'
 PROGRESS_RESTART_BUTTON_KEY = '-PROGRESS RESTART BUTTON-'
 PROGRESS_EXIT_BUTTON_KEY = '-PROGRESS EXIT BUTTON-'
 THREAD_PROGRESS_EVENT = '-THREAD PROGRESS-'
 THREAD_DRIVER_EVENT = '-THREAD DRIVER-'
+THREAD_POPUP_EVENT = '-THREAD POPUP-'
 ERROR_EVENT = '-ERROR-'
 WINDOW_EXIT_EVENT = 'Exit'
-TAB_1 = 'Create'
-TAB_2 = 'Update'
+CREATE_TAB = 'Create'
+UPDATE_TAB = 'Update'
+EXPLORER_UTILITY = 'Show in Explorer'
+RETRY_UTILITY = 'Retry'
+PROGRESS_BAR_COLOUR = ('green', 'white')
+PROGRESS_BAR_ERROR_COLOUR = ('#8b0000', '#8b0000')
 
+# Variables for helping to handle popups in different threads
+POPUP_EVENT = Event()
+POPUP_QUEUE = Queue()
+
+# Window layouts and elements
 _TEMPLATE_ROW_1 = [
     sg.Text('Template Document:', size=(18, 1)),
     sg.In(key=TEMPLATE_DOCUMENT_KEY, size=(60, 1), disabled=True, enable_events=True),
@@ -72,17 +86,11 @@ _PROGRESS_TEXT_ROW = [
     sg.Text(key=PROGRESS_TEXT_KEY, text='Initialising...')
 ]
 _PROGRESS_BAR_ROW = [
-    sg.ProgressBar(key=PROGRESS_BAR_KEY, max_value=100, size=(60, 30))
+    sg.ProgressBar(key=PROGRESS_BAR_KEY, max_value=100, size=(60, 30), bar_color=PROGRESS_BAR_COLOUR)
 ]
 _PROGRESS_OPTIONS_ROW = [
-    sg.Button(
-        'Show in Explorer',
-        key=PROGRESS_EXPLORER_BUTTON_KEY,
-        size=(13, 2),
-        pad=((5, 5), (15, 0)),
-        enable_events=True
-    ),
-    sg.Button('Restart', key=PROGRESS_RESTART_BUTTON_KEY, size=(13, 2), pad=((0, 5), (15, 0)), enable_events=True),
+    sg.Button(key=PROGRESS_UTILITY_BUTTON_KEY, size=(13, 2), pad=((0, 5), (15, 0)), enable_events=True),
+    sg.Button('Restart', key=PROGRESS_RESTART_BUTTON_KEY, size=(13, 2), pad=((5, 5), (15, 0)), enable_events=True),
     sg.Button('Exit', key=PROGRESS_EXIT_BUTTON_KEY, size=(13, 2), pad=((5, 0), (15, 0)), enable_events=True)
 ]
 _PROGRESS_INFO_COLUMN = [
@@ -144,17 +152,22 @@ def switch_to_progress_layout():
     change_window_height(PROGRESS_WINDOW_HEIGHT)
 
 
-def show_progress_options(error=False):
-    """Shows the progress options
+def toggle_progress_options(error=False):
+    """Toggles the visibility of the progress options
 
     Args:
         error(bool): Whether an error occurred that halted the progress bar
 
     """
-    if error:
-        WINDOW[PROGRESS_EXPLORER_BUTTON_KEY].update(disabled=True)
-
     progress_options_column = WINDOW[PROGRESS_OPTIONS_KEY]
+    showing = progress_options_column.visible
+    if showing:
+        progress_options_column.update(visible=False)
+        change_window_height(PROGRESS_WINDOW_HEIGHT)
+        return
+
+    utility_button = WINDOW[PROGRESS_UTILITY_BUTTON_KEY]
+    utility_button.update(text=RETRY_UTILITY if error else EXPLORER_UTILITY)
     progress_options_column.update(visible=True)
     change_window_height(PROGRESS_WINDOW_HEIGHT_WITH_OPTIONS)
 
@@ -188,3 +201,32 @@ def update_error(error_msg):
 
     """
     WINDOW.write_event_value(ERROR_EVENT, error_msg)
+
+
+def update_popup(title, text):
+    """Sends an event to the window to create a popup
+
+    Args:
+        title(str): The title of the popup
+        text(str): The text to display in the popup
+
+    """
+    WINDOW.write_event_value(THREAD_POPUP_EVENT, (title, text))
+
+
+def display_yes_no_popup(title, text):
+    """Display a popup with the yes/no options
+
+    Args:
+        title(str): The title of the popup
+        text(str): The text to display in the popup
+
+    Returns:
+        bool: True if clicked yes, otherwise false
+
+    """
+    global POPUP_EVENT, POPUP_QUEUE
+
+    response = sg.popup_yes_no(text, title=title, keep_on_top=True, modal=False)
+    POPUP_QUEUE.put(False if response == sg.WIN_CLOSED else (response == 'Yes'))
+    POPUP_EVENT.set()

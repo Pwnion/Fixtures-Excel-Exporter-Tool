@@ -4,6 +4,7 @@ import subprocess
 
 from threading import Thread
 from window import *
+from exception import UserAbortException
 from scraper import get_all_grade_htmls
 from parser import create_roster
 from export import create_excel, update_excel
@@ -16,20 +17,25 @@ def _create_roster():
         Roster: The created roster
 
     """
+    update_progress('Scraping required URLs...', 0)
+
     # Scrape the fixtures page
     try:
         grade_htmls = get_all_grade_htmls()
+    except UserAbortException as e:
+        update_error('User aborted')
+        raise e
     except Exception as e:
-        update_error(f'Could not scrape all required information from webpages\n\nException: {str(e)}')
+        update_error('Could not scrape the required information from the internet (check your internet connection)')
         raise e
 
-    update_progress('Parsing the data into an Excel document...', 92)
+    update_progress('Parsing the data into an Excel document...', 95)
 
     # Parse the data into a Roster object
     try:
         roster = create_roster(grade_htmls)
     except Exception as e:
-        update_error(f'Could not create roster\n\nException: {str(e)}')
+        update_error('Could not create the roster')
         raise e
 
     return roster
@@ -53,11 +59,11 @@ def _create(values):
     try:
         create_excel(roster, template_location, output_folder_location)
     except Exception as e:
-        update_error(f'Could not parse data into an Excel document\n\nException: {str(e)}')
+        update_error('Could not parse data into the Excel document')
         raise e
 
     update_progress('Done!', 100)
-    show_progress_options()
+    toggle_progress_options()
 
 
 def _update(values):
@@ -77,7 +83,7 @@ def _update(values):
     update_excel(roster, excel_location)
 
     update_progress('Done!', 100)
-    show_progress_options()
+    toggle_progress_options()
 
 
 def _restart_program():
@@ -118,9 +124,10 @@ def _handle_window():
                 driver.quit()
                 driver = None
 
-            WINDOW[PROGRESS_BAR_KEY].update(bar_color=('#8b0000', '#8b0000'))
-            update_progress('Error!', 100)
-            show_progress_options(error=True)
+            # Update progress items with the error
+            WINDOW[PROGRESS_BAR_KEY].update(bar_color=PROGRESS_BAR_ERROR_COLOUR)
+            update_progress(f'Error: {values[ERROR_EVENT]}', 100)
+            toggle_progress_options(error=True)
             continue
 
         # Receive events from a running thread
@@ -135,12 +142,27 @@ def _handle_window():
             if event == THREAD_DRIVER_EVENT:
                 driver = values[THREAD_DRIVER_EVENT]
 
+            # Receive a request to display a popup
+            if event == THREAD_POPUP_EVENT:
+                popup_info = values[THREAD_POPUP_EVENT]
+                display_yes_no_popup(popup_info[0], popup_info[1])
+
             continue
 
         # Receive events from the progress window
         if 'PROGRESS' in event:
-            if event == PROGRESS_EXPLORER_BUTTON_KEY:
-                subprocess.Popen(f'explorer "{values[OUTPUT_FOLDER_KEY]}"')
+            if event == PROGRESS_UTILITY_BUTTON_KEY:
+                utility_button_text = WINDOW[PROGRESS_UTILITY_BUTTON_KEY].get_text()
+                if utility_button_text == EXPLORER_UTILITY:
+                    subprocess.Popen(f'explorer "{values[OUTPUT_FOLDER_KEY]}"')
+                elif utility_button_text == RETRY_UTILITY:
+                    WINDOW[PROGRESS_TEXT_KEY].update('Initialising...')
+                    WINDOW[PROGRESS_BAR_KEY].update(0, bar_color=PROGRESS_BAR_COLOUR)
+                    toggle_progress_options()
+                    if curr_tab == CREATE_TAB:
+                        Thread(target=_create, args=(values,), daemon=True).start()
+                    elif curr_tab == UPDATE_TAB:
+                        Thread(target=_update, args=(values,), daemon=True).start()
             if event == PROGRESS_RESTART_BUTTON_KEY:
                 _restart_program()
             if event == PROGRESS_EXIT_BUTTON_KEY:
@@ -153,7 +175,7 @@ def _handle_window():
             curr_tab = tab_group.get()
 
         # Handle each tab differently
-        if curr_tab == TAB_1:
+        if curr_tab == CREATE_TAB:
             # Get the text from the elements on the 'Create' tab
             template_document_text = WINDOW[TEMPLATE_DOCUMENT_KEY].get()
             output_folder_text = WINDOW[OUTPUT_FOLDER_KEY].get()
@@ -169,7 +191,7 @@ def _handle_window():
                 # Switch to the progress layout and start creating the Excel document
                 switch_to_progress_layout()
                 Thread(target=_create, args=(values,), daemon=True).start()
-        elif curr_tab == TAB_2:
+        elif curr_tab == UPDATE_TAB:
             # Get the text from the element on the 'Update' tab
             update_document_text = WINDOW[UPDATE_DOCUMENT_KEY].get()
 

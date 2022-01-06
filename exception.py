@@ -1,0 +1,2 @@
+class UserAbortException(Exception):
+    pass
