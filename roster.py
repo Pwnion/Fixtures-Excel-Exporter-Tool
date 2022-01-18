@@ -70,6 +70,21 @@ class Court(Enum):
         if num == cls.COURT_4.value:
             return cls.COURT_4
 
+    @classmethod
+    def from_string(cls, string):
+        """Converts a court's Excel string into a Court enum value
+
+        Args:
+            string(str): The court's Excel string
+
+        Returns:
+            Court: The resulting Court enum value
+
+        """
+        for court in Court:
+            if f'Crt {court.value}' == string:
+                return court
+
     def __str__(self):
         return self.name.replace('_', ' ').title()
 
@@ -135,6 +150,6 @@ class Roster:
         data['Date'] = self.date
         for round_ in self.rounds:
             for match in round_.matches:
-                Roster._insert_match_in_order(match, data[match.location][match.court])
+                self._insert_match_in_order(match, data[match.location][match.court])
 
         return data

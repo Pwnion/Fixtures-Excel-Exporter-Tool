@@ -9,7 +9,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from exception import UserAbortException
+from exception import UserAbortException, RoundNotFoundException
 from window import update_progress, update_driver, update_popup, POPUP_EVENT, POPUP_QUEUE
 
 # URL constants
@@ -162,7 +162,7 @@ def _get_htmls_with_js(urls):
     htmls = []
 
     # Initialise chrome driver
-    driver = webdriver.Chrome('driver/chromedriver')
+    driver = webdriver.Chrome('driver\\chromedriver.exe')
     driver.set_page_load_timeout(_PAGE_LOAD_TIMEOUT)
     update_driver(driver)
 
@@ -245,7 +245,7 @@ def _get_current_round_num(grade_html):
     return int(num_string)
 
 
-def _sanitise_grade_urls_by_date(grade_urls):
+def _transform_grade_urls(grade_urls, date_string=None):
     """Make sure the grade urls have the correct date
 
     Args:
@@ -255,17 +255,9 @@ def _sanitise_grade_urls_by_date(grade_urls):
         list(str): The sanitised grade URLs
 
     """
-    # Check if the date on the webpage is next Saturday
+    # Get the HTML for each URL
     grade_htmls = _get_grade_htmls([f'{grade_url}/R1' for grade_url in grade_urls])
     grade_html = grade_htmls[0]
-    date = _get_current_date(grade_html)
-    now = datetime.now()
-    saturday_delta = timedelta((calendar.SATURDAY - now.weekday()) % 7)
-    saturday_datetime = now + saturday_delta
-    saturday_date_string = saturday_datetime.strftime('%d/%m/%Y')
-    if date == saturday_date_string:
-        current_round_num = _get_current_round_num(grade_html)
-        return _get_grade_urls_by_round(grade_htmls, current_round_num)
 
     # Get the dates for each round
     dates = []
@@ -275,14 +267,32 @@ def _sanitise_grade_urls_by_date(grade_urls):
         start = date_match + len(search_term) + 1
         start = grade_html.find('"', start) + 1
         end = grade_html.find('"', start)
-        date_string = grade_html[start:end]
-        date_string = datetime.strptime(date_string, '%Y-%m-%d').strftime('%d/%m/%Y')
-        dates.append(date_string)
+        date_string_to_add = grade_html[start:end]
+        date_string_to_add = datetime.strptime(date_string_to_add, '%Y-%m-%d').strftime('%d/%m/%Y')
+        dates.append(date_string_to_add)
+
+    # If a date string is specified, get the grade URLs for that date instead
+    if date_string is not None:
+        if date_string not in dates:
+            raise RoundNotFoundException(date_string)
+
+        date_index = dates.index(date_string)
+        return _get_grade_urls_by_round(grade_htmls, date_index)
+
+    # Check if the date on the webpage is next Saturday
+    date = _get_current_date(grade_html)
+    now = datetime.now()
+    saturday_delta = timedelta((calendar.SATURDAY - now.weekday()) % 7)
+    saturday_datetime = now + saturday_delta
+    saturday_date_string = saturday_datetime.strftime('%d/%m/%Y')
+    if date == saturday_date_string:
+        current_round_num = _get_current_round_num(grade_html)
+        return _get_grade_urls_by_round(grade_htmls, current_round_num)
 
     # If there is a round with the correct date, use it
     if saturday_date_string in dates:
-        date_index = dates.index(saturday_date_string)
-        return _get_grade_urls_by_round(grade_htmls, date_index)
+        saturday_date_index = dates.index(saturday_date_string)
+        return _get_grade_urls_by_round(grade_htmls, saturday_date_index)
 
     # Determine whether to continue based on user input
     update_progress('Waiting for user input...', _SHALLOW_SCRAPE_LENGTH)
@@ -300,7 +310,7 @@ def _sanitise_grade_urls_by_date(grade_urls):
     return _get_grade_urls_by_round(grade_htmls, -1)
 
 
-def get_all_grade_htmls():
+def get_all_grade_htmls(date_string=None):
     """Gets the HTML of all required grade pages
 
     Returns:
@@ -311,6 +321,6 @@ def get_all_grade_htmls():
     grades_url = _get_grades_url(competitions_html)
     grades_html = _get_html(grades_url)
     grade_urls = _get_grade_urls(grades_html)
-    grade_urls = _sanitise_grade_urls_by_date(grade_urls)
+    grade_urls = _transform_grade_urls(grade_urls, date_string)
     grade_htmls_with_js = _get_htmls_with_js(grade_urls)
     return grade_htmls_with_js

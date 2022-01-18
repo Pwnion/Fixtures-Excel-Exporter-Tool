@@ -4,14 +4,14 @@ import subprocess
 
 from threading import Thread
 from window import *
-from exception import UserAbortException
+from exception import UserAbortException, RoundNotFoundException
 from scraper import get_all_grade_htmls
 from parser import create_roster
-from export import create_excel, update_excel
+from excel import create_excel, get_excel_date, update_excel
 
 
-def _create_roster():
-    """Creates the roster
+def _create_roster(date_string=None):
+    """Create the roster
 
     Returns:
         Roster: The created roster
@@ -21,15 +21,24 @@ def _create_roster():
 
     # Scrape the fixtures page
     try:
-        grade_htmls = get_all_grade_htmls()
+        grade_htmls = get_all_grade_htmls(date_string)
     except UserAbortException as e:
         update_error('User aborted')
+        raise e
+    except RoundNotFoundException as e:
+        update_error(f'Could not update Excel document (data not found for {str(e)})')
         raise e
     except Exception as e:
         update_error('Could not scrape the required information from the internet (check your internet connection)')
         raise e
 
-    update_progress('Parsing the data into an Excel document...', 95)
+    # Change the progress message depending on creation or updating
+    if date_string is None:
+        update_msg = 'Parsing the data into an Excel document...'
+    else:
+        update_msg = 'Updating the Excel document...'
+
+    update_progress(update_msg, 95)
 
     # Parse the data into a Roster object
     try:
@@ -42,7 +51,7 @@ def _create_roster():
 
 
 def _create(values):
-    """Creates the Excel document
+    """Create the Excel document
 
     Args:
         values(dict(str: str)): The window values
@@ -73,14 +82,19 @@ def _update(values):
         values(dict(str: str)): Window values
 
     """
-    # Create the roster
-    roster = _create_roster()
-
     # Get the location of Excel document to update
     excel_location = values[UPDATE_DOCUMENT_KEY]
 
+    # Create the roster
+    date_string = get_excel_date(excel_location)
+    roster = _create_roster(date_string)
+
     # Update the Excel document
-    update_excel(roster, excel_location)
+    try:
+        update_excel(roster, excel_location)
+    except Exception as e:
+        update_error('Could not update the Excel document')
+        raise e
 
     update_progress('Done!', 100)
     toggle_progress_options()
