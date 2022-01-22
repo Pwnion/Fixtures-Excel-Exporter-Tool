@@ -1,5 +1,6 @@
 import re
 import calendar
+import chromedriver_autoinstaller
 
 from datetime import datetime, timedelta
 from requests_html import HTMLSession
@@ -111,26 +112,22 @@ def _get_grade_urls(grades_html):
     return [_DOMAIN + grade['href'] for grade in saturday_grade_elements]
 
 
-def _get_grade_urls_by_round(grade_htmls, round_index):
-    """Gets the list of urls that correspond to the fixtures for a specific round
+def _get_grade_url_by_round(grade_html, round_index):
+    """Gets the url that corresponds to the fixtures for a specific round
 
     Args:
-        grade_htmls(list(str)): The HTML of the grade pages
+        grade_html(str): The HTML of the grade page
         round_index(int): The round index
 
     Returns:
-        list(str): The list of URLs that correspond to the fixtures for a specific round
+        str: The URL that corresponds to the fixtures for a specific round
 
     """
-    grade_urls = []
-    for grade_html in grade_htmls:
-        soup = BeautifulSoup(grade_html, 'html.parser')
-        round_elements = soup.find_all('a', class_='sc-2zsuyh-3 kQmXVu')
-        round_element = round_elements[round_index]
-        grade_url = _DOMAIN + round_element['href']
-        grade_urls.append(grade_url)
-
-    return grade_urls
+    soup = BeautifulSoup(grade_html, 'html.parser')
+    round_elements = soup.find_all('a', class_='sc-2zsuyh-3 kQmXVu')
+    round_element = round_elements[round_index]
+    grade_url = _DOMAIN + round_element['href']
+    return grade_url
 
 
 def _wait_for_html(driver):
@@ -162,7 +159,9 @@ def _get_htmls_with_js(urls):
     htmls = []
 
     # Initialise chrome driver
-    driver = webdriver.Chrome('driver\\chromedriver.exe')
+    update_progress('Downloading Chrome driver...', _SHALLOW_SCRAPE_LENGTH)
+    chromedriver_autoinstaller.install()
+    driver = webdriver.Chrome()
     driver.set_page_load_timeout(_PAGE_LOAD_TIMEOUT)
     update_driver(driver)
 
@@ -226,23 +225,28 @@ def _get_current_date(grade_html):
     return date_string
 
 
-def _get_current_round_num(grade_html):
-    """Gets the current round number
+def _get_grade_dates(grade_html):
+    """Gets the dates for each round from a grade HTMl string
 
     Args:
         grade_html(str): The grade HTML string
 
     Returns:
-        int: The current round number
+        list(str): The list of dates
 
     """
-    search_term = 'number'
-    start = grade_html.find('"current":true')
-    start = grade_html.find(search_term, start) + len(search_term)
-    start = grade_html.find(':', start) + 1
-    end = grade_html.find(',', start)
-    num_string = grade_html[start:end].strip()
-    return int(num_string)
+    dates = []
+    search_term = 'provisionalDate'
+    date_matches = [match.start() for match in re.finditer(search_term, grade_html)]
+    for date_match in date_matches:
+        start = date_match + len(search_term) + 1
+        start = grade_html.find('"', start) + 1
+        end = grade_html.find('"', start)
+        date_string_to_add = grade_html[start:end]
+        date_string_to_add = datetime.strptime(date_string_to_add, '%Y-%m-%d').strftime('%d/%m/%Y')
+        dates.append(date_string_to_add)
+
+    return dates
 
 
 def _transform_grade_urls(grade_urls, date_string=None):
@@ -257,49 +261,33 @@ def _transform_grade_urls(grade_urls, date_string=None):
     """
     # Get the HTML for each URL
     grade_htmls = _get_grade_htmls([f'{grade_url}/R1' for grade_url in grade_urls])
-    grade_html = grade_htmls[0]
-
-    # Get the dates for each round
-    dates = []
-    search_term = 'provisionalDate'
-    date_matches = [match.start() for match in re.finditer(search_term, grade_html)]
-    for date_match in date_matches:
-        start = date_match + len(search_term) + 1
-        start = grade_html.find('"', start) + 1
-        end = grade_html.find('"', start)
-        date_string_to_add = grade_html[start:end]
-        date_string_to_add = datetime.strptime(date_string_to_add, '%Y-%m-%d').strftime('%d/%m/%Y')
-        dates.append(date_string_to_add)
+    dates = [_get_grade_dates(grade_html) for grade_html in grade_htmls]
 
     # If a date string is specified, get the grade URLs for that date instead
     if date_string is not None:
-        if date_string not in dates:
+        if date_string not in dates[0]:
             raise RoundNotFoundException(date_string)
 
-        date_index = dates.index(date_string)
-        return _get_grade_urls_by_round(grade_htmls, date_index)
+        round_indices = [dates_.index(date_string) for dates_ in dates]
+        return [_get_grade_url_by_round(grade_htmls[i], round_indices[i]) for i in range(len(grade_htmls))]
 
     # Check if the date on the webpage is next Saturday
-    date = _get_current_date(grade_html)
     now = datetime.now()
     saturday_delta = timedelta((calendar.SATURDAY - now.weekday()) % 7)
     saturday_datetime = now + saturday_delta
     saturday_date_string = saturday_datetime.strftime('%d/%m/%Y')
-    if date == saturday_date_string:
-        current_round_num = _get_current_round_num(grade_html)
-        return _get_grade_urls_by_round(grade_htmls, current_round_num)
 
     # If there is a round with the correct date, use it
-    if saturday_date_string in dates:
-        saturday_date_index = dates.index(saturday_date_string)
-        return _get_grade_urls_by_round(grade_htmls, saturday_date_index)
+    if saturday_date_string in dates[0]:
+        round_indices = [dates_.index(saturday_date_string) for dates_ in dates]
+        return [_get_grade_url_by_round(grade_htmls[i], round_indices[i]) for i in range(len(grade_htmls))]
 
     # Determine whether to continue based on user input
     update_progress('Waiting for user input...', _SHALLOW_SCRAPE_LENGTH)
     update_popup(
         'Warning',
         f'Data cannot be found for next Saturday ({saturday_date_string}).\n'
-        f'Do you want to continue with the latest available data? ({dates[-1]})'
+        f'Do you want to continue with the latest available data? ({dates[0][-1]})'
     )
     POPUP_EVENT.wait()
     POPUP_EVENT.clear()
@@ -307,7 +295,7 @@ def _transform_grade_urls(grade_urls, date_string=None):
         raise UserAbortException()
 
     # Get the grade URLs for the latest round
-    return _get_grade_urls_by_round(grade_htmls, -1)
+    return [_get_grade_url_by_round(grade_htmls[i], -1) for i in range(len(grade_htmls))]
 
 
 def get_all_grade_htmls(date_string=None):
