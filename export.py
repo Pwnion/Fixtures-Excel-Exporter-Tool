@@ -1,3 +1,5 @@
+import os
+
 from openpyxl import load_workbook
 from openpyxl.styles import NamedStyle, Font, PatternFill, Alignment, Border, Side
 from datetime import datetime
@@ -134,7 +136,10 @@ class _MatchChanges:
         moved = self.parsed_matches[0]
         added = self.parsed_matches[1]
         removed = self.parsed_matches[2]
-        if len(moved) > 0:
+        if not moved and not added and not removed:
+            return 'No changes'
+
+        if moved:
             string += 'Moved:\n'
             for matches_pair in moved:
                 from_match = matches_pair[0][0]
@@ -149,22 +154,22 @@ class _MatchChanges:
                 # Add the moved components to the string
                 if from_match.time != to_match.time and from_place != to_place:
                     string += (
-                        f'{match_string} moved from {from_place} @ '
+                        f'\t{match_string} moved from {from_place} @ '
                         f'{from_match.time.strftime(_TIME_FORMAT)} to {to_place} @ '
                         f'{to_match.time.strftime(_TIME_FORMAT)}\n'
                     )
                 elif from_place == to_place:
                     string += (
-                        f'{match_string} moved from {from_match.time.strftime(_TIME_FORMAT)} '
+                        f'\t{match_string} moved from {from_match.time.strftime(_TIME_FORMAT)} '
                         f'to {to_match.time.strftime(_TIME_FORMAT)} (Still @ {from_place})\n'
                     )
                 elif from_match.time == to_match.time:
                     match_time = from_match.time.strftime(_TIME_FORMAT)
-                    string += f'{match_string} moved from {from_place} to {to_place} (Still @ {match_time})\n'
+                    string += f'\t{match_string} moved from {from_place} to {to_place} (Still @ {match_time})\n'
 
             string += '\n'
 
-        if len(added) > 0:
+        if added:
             string += 'Added:\n'
             duplicates = []
             for match in added.values():
@@ -177,7 +182,7 @@ class _MatchChanges:
                     match_string = f'Team \'{match.team1}\' ({match.grade})'
 
                 string += (
-                    f'{match_string} was added to {match.location}, {match.court} '
+                    f'\t{match_string} was added to {match.location}, {match.court} '
                     f'@ {match.time.strftime(_TIME_FORMAT)}\n'
                 )
 
@@ -185,7 +190,7 @@ class _MatchChanges:
 
             string += '\n'
 
-        if len(removed) > 0:
+        if removed:
             string += 'Removed:\n'
             duplicates = []
             for match in removed.values():
@@ -198,7 +203,7 @@ class _MatchChanges:
                     match_string = f'Team \'{match.team1}\' ({match.grade})'
 
                 string += (
-                    f'{match_string} was removed from {match.location}, {match.court} '
+                    f'\t{match_string} was removed from {match.location}, {match.court} '
                     f'@ {match.time.strftime(_TIME_FORMAT)}\n'
                 )
 
@@ -457,6 +462,21 @@ def _fix_row_heights(ws):
         ws.row_dimensions[i].height = _ROW_HEIGHT
 
 
+def _highlight_row(ws, row):
+    """Highlight a row in an Excel spreadsheet
+
+    Args:
+        ws(Worksheet): The Excel worksheet
+        row(int): The row to highlight
+
+    """
+    row_cells = ws[f'{_TEAM_1_COLUMN}{row}':f'{_get_row_end(ws, row)}{row}'][0]
+
+    # Highlight the cells yellow
+    for row_cell in row_cells:
+        row_cell.fill = PatternFill(fgColor='FFFF00', fill_type='solid')
+
+
 def update_excel(roster, excel_location):
     """Updates an Excel document with a new roster
 
@@ -474,13 +494,25 @@ def update_excel(roster, excel_location):
         data_courts = data[location]
         eof = False
 
-        # Tracking variables for the Excel document
-        excel_row = _FIRST_TABLE_ROW
-        excel_court = Court.from_string(ws[f'{_COURT_COLUMN}{_FIRST_TABLE_ROW}'].value)
-
         # Tracking variables for the data object
         data_row = 0
         data_court = Court.COURT_1
+
+        # Tracking variables for the Excel document
+        excel_row = _FIRST_TABLE_ROW
+        excel_court = Court.from_string(ws[f'{_COURT_COLUMN}{_FIRST_TABLE_ROW}'].value)
+        if excel_court is None:
+            while data_court is not None:
+                if data[location][data_court]:
+                    excel_court = data_court
+                    break
+
+                data_court = Court.from_num(data_court.value + 1)
+
+            if excel_court is None:
+                continue
+
+            _update_court_header(ws, excel_row, excel_court, location)
 
         # Iterate through the rows of the worksheet and compare with the data object
         while True:
@@ -538,6 +570,14 @@ def update_excel(roster, excel_location):
             # Get matches from the data object for comparison
             data_matches = data_courts[data_court]
 
+            # Handle matches that need to be cancelled at the end of a court
+            if data_row > len(data_matches) - 1:
+                overflow_match = _excel_row_to_match(ws, excel_row, location, excel_court)
+                match_changes.remove(overflow_match)
+                _highlight_row(ws, excel_row)
+                excel_row += 1
+                continue
+
             # Compare the rows in the Excel worksheet with the data object and act accordingly
             data_match = data_matches[data_row]
             data_time = data_match.time
@@ -590,23 +630,24 @@ def update_excel(roster, excel_location):
                 else:
                     match = _excel_row_to_match(ws, excel_row, location, excel_court)
                     if match.team1 != 'FORFEIT':
-                        row_cells = ws[f'{_TEAM_1_COLUMN}{excel_row}':f'{_get_row_end(ws, excel_row)}{excel_row}'][0]
-
-                        # Highlight the cells yellow
-                        for row_cell in row_cells:
-                            row_cell.fill = PatternFill(fgColor='FFFF00', fill_type='solid')
-
+                        _highlight_row(ws, excel_row)
                         match_changes.remove(match)
 
                     excel_row += 1
 
         _fix_row_heights(ws)
 
-    # Write the changes to a text file
-    # with open('filename', 'w') as f:
-    #     f.write(str(match_changes))
+    # Get the name of the match changes text file
+    start = excel_location.rfind('/') + 1
+    end = excel_location.find('.xlsx')
+    filename = f'{excel_location[start:end]} Changes.txt'
 
-    print(match_changes)
+    # Write the changes to a text file
+    path = f'changes/{filename}'
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        f.write(str(match_changes))
+
     match_changes.delete_moved_forfeited_matches(wb)
 
     # Set the first worksheet as active

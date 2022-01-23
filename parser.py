@@ -2,6 +2,8 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from roster import *
 
+TBC = 'TBC'
+
 
 def _get_date(grade_html):
     """Gets the date from a grade html string
@@ -31,8 +33,7 @@ def _format_grade(grade):
     age_start = grade.find(' ') + 1
     age_end = grade.find(' ', age_start)
     section_start = grade.find(' ', age_end + 1) + 1
-    section_end = grade.find(' ', section_start)
-    return grade[age_start:age_end] + grade[section_start:section_end]
+    return grade[age_start:age_end] + grade[section_start:]
 
 
 def _get_grade(grade_html):
@@ -114,8 +115,12 @@ def _get_times(grade_html):
     time_location_htmls = _get_time_location_htmls(grade_html)
     for time_location_html in time_location_htmls:
         soup = BeautifulSoup(time_location_html, 'html.parser')
-        time_string = soup.find('span', class_='sc-kEqYlL kjKiYr').text
-        time = datetime.strptime(time_string, '%I:%M %p')
+        if soup.find('span', class_='sc-kEqYlL sc-10c3c88-16 kwnZGb fdFTVQ'):
+            time = TBC
+        else:
+            time_string = soup.find('span', class_='sc-kEqYlL kjKiYr').text
+            time = datetime.strptime(time_string, '%I:%M %p')
+
         times.append(time)
 
     return times
@@ -131,9 +136,18 @@ def _get_location_court_strings(grade_html):
         list(str): The location/court strings
 
     """
-    soup = BeautifulSoup(grade_html, 'html.parser')
-    location_court_elements = soup.find_all('a', class_='sc-kEqYlL sc-10c3c88-20 bBbCEa kreAQ')
-    return [location_court_element.text for location_court_element in location_court_elements]
+    location_court_strings = []
+
+    time_location_htmls = _get_time_location_htmls(grade_html)
+    for time_location_html in time_location_htmls:
+        soup = BeautifulSoup(time_location_html, 'html.parser')
+        if soup.find('span', class_='sc-kEqYlL sc-10c3c88-16 kwnZGb fdFTVQ'):
+            location_court_strings.append(TBC)
+        else:
+            location_court_element = soup.find('a', class_='sc-kEqYlL sc-10c3c88-20 bBbCEa kreAQ')
+            location_court_strings.append(location_court_element.text)
+
+    return location_court_strings
 
 
 def _get_locations(location_court_strings):
@@ -149,9 +163,12 @@ def _get_locations(location_court_strings):
     locations = []
 
     for location_court_string in location_court_strings:
-        end = location_court_string.find('/') - 1
-        location = location_court_string[:end]
-        locations.append(Location.from_official_name(location))
+        if location_court_string == TBC:
+            locations.append(TBC)
+        else:
+            end = location_court_string.find('/') - 1
+            location = location_court_string[:end]
+            locations.append(Location.from_official_name(location))
 
     return locations
 
@@ -169,10 +186,13 @@ def _get_courts(location_court_strings):
     courts = []
 
     for location_court_string in location_court_strings:
-        search_term = 'Court'
-        start = location_court_string.find(search_term) + len(search_term) + 1
-        court = int(location_court_string[start:])
-        courts.append(Court.from_num(court))
+        if location_court_string == TBC:
+            courts.append(TBC)
+        else:
+            search_term = 'Court'
+            start = location_court_string.find(search_term) + len(search_term) + 1
+            court = int(location_court_string[start:])
+            courts.append(Court.from_num(court))
 
     return courts
 
@@ -198,11 +218,14 @@ def _create_matches(grade_html):
     courts = _get_courts(location_court_strings)
 
     for i in range(len(teams) // 2):
-        team1 = teams[i * 2]
-        team2 = teams[i * 2 + 1]
         time = times[i]
         location = locations[i]
         court = courts[i]
+        if time == TBC or location == TBC or court == TBC:
+            continue
+
+        team1 = teams[i * 2]
+        team2 = teams[i * 2 + 1]
         match = Match(grade, team1, team2, time, location, court)
         matches.append(match)
 

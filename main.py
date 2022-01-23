@@ -1,4 +1,3 @@
-import os
 import sys
 import subprocess
 
@@ -168,7 +167,14 @@ def _handle_window():
             if event == PROGRESS_UTILITY_BUTTON_KEY:
                 utility_button_text = WINDOW[PROGRESS_UTILITY_BUTTON_KEY].get_text()
                 if utility_button_text == EXPLORER_UTILITY:
-                    subprocess.Popen(f'explorer "{values[OUTPUT_FOLDER_KEY]}"')
+                    if curr_tab == CREATE_TAB:
+                        path = values[OUTPUT_FOLDER_KEY]
+                    else:
+                        end = values[UPDATE_DOCUMENT_KEY].rfind('/')
+                        path = values[UPDATE_DOCUMENT_KEY][:end]
+
+                    path = path.replace('/', '\\')
+                    subprocess.Popen(f'explorer "{path}"')
                 elif utility_button_text == RETRY_UTILITY:
                     WINDOW[PROGRESS_TEXT_KEY].update('Initialising...')
                     WINDOW[PROGRESS_BAR_KEY].update(0, bar_color=PROGRESS_BAR_COLOUR)

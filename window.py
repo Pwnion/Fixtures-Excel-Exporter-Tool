@@ -1,4 +1,5 @@
 import PySimpleGUI as sg
+import os
 
 from threading import Event
 from queue import Queue
@@ -40,7 +41,13 @@ POPUP_QUEUE = Queue()
 # Window layouts and elements
 _TEMPLATE_ROW_1 = [
     sg.Text('Template Document:', size=(18, 1)),
-    sg.In(key=TEMPLATE_DOCUMENT_KEY, size=(60, 1), disabled=True, enable_events=True),
+    sg.In(
+        os.getcwd().replace('\\', '/') + '/resources/template.xlsx',
+        key=TEMPLATE_DOCUMENT_KEY,
+        size=(60, 1),
+        disabled=True,
+        enable_events=True
+    ),
     sg.FileBrowse(file_types=(('Excel Documents', '*.xlsx'),))
 ]
 _OUTPUT_ROW_1 = [

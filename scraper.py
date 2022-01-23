@@ -92,7 +92,7 @@ def _get_grades_url(competitions_html):
 
     """
     soup = BeautifulSoup(competitions_html, 'html.parser')
-    ref = soup.find_all('a', href=re.compile('junior-domestic'))[-1]['href']
+    ref = soup.find_all('a', href=re.compile('junior-domestic'))[0]['href']
     return _DOMAIN + ref
 
 
@@ -145,6 +145,21 @@ def _wait_for_html(driver):
     return driver.page_source
 
 
+def _is_saturday_match(grade_html):
+    """Checks if a Saturday match has actually been scheduled for Saturday
+
+    Args:
+        grade_html(str): The HTML of the grade page
+
+    Returns:
+        bool: True if the match is scheduled for Saturday, otherwise False
+
+    """
+    soup = BeautifulSoup(grade_html, 'html.parser')
+    date_text = soup.find('span', class_='sc-kEqYlL jndYxC').text
+    return 'saturday' in date_text.lower()
+
+
 def _get_htmls_with_js(urls):
     """Gets the HTML after the javascript has loaded from a list of provided URLs
        If any given webpage or the javascript in the webpage cannot load, it will retry once
@@ -166,7 +181,7 @@ def _get_htmls_with_js(urls):
     update_driver(driver)
 
     # Position the window off the screen, so it's not visible
-    driver.set_window_position(-2000, 0)
+    driver.set_window_position(-10000, 0)
 
     # A list of grades to display while loading
     grades = [_url_to_grade(urls[0])]
@@ -202,7 +217,7 @@ def _get_htmls_with_js(urls):
 
     driver.quit()
     update_driver(None)
-    return htmls
+    return list(filter(lambda html: _is_saturday_match(html), htmls))
 
 
 def _get_current_date(grade_html):
