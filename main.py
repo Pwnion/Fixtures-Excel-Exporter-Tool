@@ -194,6 +194,9 @@ def _handle_window():
         if event == TAB_GROUP_KEY:
             curr_tab = tab_group.get()
 
+            # Clear the input widgets being highlighted on tab change
+            WINDOW[TEMPLATE_DOCUMENT_KEY if curr_tab == CREATE_TAB else UPDATE_DOCUMENT_KEY].Widget.select_clear()
+
         # Handle each tab differently
         if curr_tab == CREATE_TAB:
             # Get the text from the elements on the 'Create' tab

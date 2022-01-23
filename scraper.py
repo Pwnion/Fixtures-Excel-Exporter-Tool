@@ -1,11 +1,14 @@
 import re
 import calendar
+from subprocess import CREATE_NO_WINDOW
+
 import chromedriver_autoinstaller
 
 from datetime import datetime, timedelta
 from requests_html import HTMLSession
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -160,6 +163,7 @@ def _is_saturday_match(grade_html):
     return 'saturday' in date_text.lower()
 
 
+# noinspection all
 def _get_htmls_with_js(urls):
     """Gets the HTML after the javascript has loaded from a list of provided URLs
        If any given webpage or the javascript in the webpage cannot load, it will retry once
@@ -175,8 +179,10 @@ def _get_htmls_with_js(urls):
 
     # Initialise chrome driver
     update_progress('Downloading Chrome driver...', _SHALLOW_SCRAPE_LENGTH)
-    chromedriver_autoinstaller.install()
-    driver = webdriver.Chrome()
+    driver_path = chromedriver_autoinstaller.install()
+    service = Service(driver_path)
+    service.creationflags = CREATE_NO_WINDOW
+    driver = webdriver.Chrome(service=service)
     driver.set_page_load_timeout(_PAGE_LOAD_TIMEOUT)
     update_driver(driver)
 

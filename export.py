@@ -640,7 +640,7 @@ def update_excel(roster, excel_location):
     # Get the name of the match changes text file
     start = excel_location.rfind('/') + 1
     end = excel_location.find('.xlsx')
-    filename = f'{excel_location[start:end]} Changes.txt'
+    filename = f'{excel_location[start:end]}.txt'
 
     # Write the changes to a text file
     path = f'changes/{filename}'
