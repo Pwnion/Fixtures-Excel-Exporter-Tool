@@ -102,31 +102,6 @@ class _MatchChanges:
 
         self.parsed_matches = (moved, added, removed)
 
-    def delete_moved_forfeited_matches(self, wb):
-        """Delete moved matches that have been labelled as a forfeit
-
-        Args:
-            wb(Workbook): The Excel workbook to delete the matches from
-
-        """
-        if self.parsed_matches is None:
-            return
-
-        removed = self.parsed_matches[2]
-        for location in Location:
-            ws = wb[str(location)]
-            row = _FIRST_TABLE_ROW
-            while ws[f'{_TIME_COLUMN}{row}'].value is not None:
-                team1_cell = ws[f'{_TEAM_1_COLUMN}{row}']
-                if 'F' in team1_cell.fill.start_color.index and team1_cell.value != 'FORFEIT':
-                    if team1_cell.value not in removed:
-                        ws.delete_rows(row)
-                    else:
-                        ws[f'{_TEAM_1_COLUMN}{row}'].value = ws[f'{_TEAM_2_COLUMN}{row}'].value = 'FORFEIT'
-                        row += 1
-                else:
-                    row += 1
-
     def __str__(self):
         string = ''
 
@@ -462,19 +437,35 @@ def _fix_row_heights(ws):
         ws.row_dimensions[i].height = _ROW_HEIGHT
 
 
-def _highlight_row(ws, row):
-    """Highlight a row in an Excel spreadsheet
+def _label_row_as_forfeit(ws, row):
+    """Label a row as a forfeit
 
     Args:
         ws(Worksheet): The Excel worksheet
-        row(int): The row to highlight
+        row(int): The row to label as a forfeit
 
     """
     row_cells = ws[f'{_TEAM_1_COLUMN}{row}':f'{_get_row_end(ws, row)}{row}'][0]
+    row_cells[0].value = row_cells[1].value = 'FORFEIT'
 
     # Highlight the cells yellow
     for row_cell in row_cells:
         row_cell.fill = PatternFill(fgColor='FFFF00', fill_type='solid')
+
+
+def _clear_row_as_forfeit(ws, row):
+    """Clear a row as a forfeit
+
+    Args:
+        ws(Worksheet): The Excel worksheet
+        row(int): The row to clear as a forfeit
+
+    """
+    row_cells = ws[f'{_TEAM_1_COLUMN}{row}':f'{_get_row_end(ws, row)}{row}'][0]
+
+    # Clear the highlight from the cells
+    for row_cell in row_cells:
+        row_cell.fill = PatternFill(fill_type=None)
 
 
 def update_excel(roster, excel_location):
@@ -574,7 +565,7 @@ def update_excel(roster, excel_location):
             if data_row > len(data_matches) - 1:
                 overflow_match = _excel_row_to_match(ws, excel_row, location, excel_court)
                 match_changes.remove(overflow_match)
-                _highlight_row(ws, excel_row)
+                _label_row_as_forfeit(ws, excel_row)
                 excel_row += 1
                 continue
 
@@ -602,13 +593,21 @@ def update_excel(roster, excel_location):
 
                 # Compare team 1
                 if data_match.team1 != excel_team1_text:
-                    match_changes.remove(removed_match, half=True)
+                    if excel_team1_text != 'FORFEIT':
+                        match_changes.remove(removed_match, half=True)
+                    else:
+                        _clear_row_as_forfeit(ws, excel_row)
+
                     match_changes.add(data_match, half=True)
                     excel_team1.value = data_match.team1
 
                 # Compare team 2
                 if data_match.team2 != excel_team2_text:
-                    match_changes.remove(removed_match, half=True, flip=True)
+                    if excel_team2_text != 'FORFEIT':
+                        match_changes.remove(removed_match, half=True, flip=True)
+                    else:
+                        _clear_row_as_forfeit(ws, excel_row)
+
                     match_changes.add(data_match, half=True, flip=True)
                     excel_team2.value = data_match.team2
 
@@ -630,7 +629,7 @@ def update_excel(roster, excel_location):
                 else:
                     match = _excel_row_to_match(ws, excel_row, location, excel_court)
                     if match.team1 != 'FORFEIT':
-                        _highlight_row(ws, excel_row)
+                        _label_row_as_forfeit(ws, excel_row)
                         match_changes.remove(match)
 
                     excel_row += 1
@@ -647,8 +646,6 @@ def update_excel(roster, excel_location):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w') as f:
         f.write(str(match_changes))
-
-    match_changes.delete_moved_forfeited_matches(wb)
 
     # Set the first worksheet as active
     wb.active = 0

@@ -1,5 +1,6 @@
 import PySimpleGUI as sg
 import os
+import sys
 
 from threading import Event
 from queue import Queue
@@ -127,10 +128,16 @@ _LAYOUT = [
     _PROGRESS_LAYOUT,
     _MAIN_LAYOUT
 ]
-_VERSION = '1.0.0'
+_VERSION = '1.0.1'
 _TITLE = f'Fixtures Excel Exporter Tool (FEET) v{_VERSION}'
 
-WINDOW = sg.Window(_TITLE, _LAYOUT, size=(WINDOW_WIDTH, MAIN_WINDOW_HEIGHT), resizable=False)
+WINDOW = sg.Window(
+    _TITLE,
+    _LAYOUT,
+    size=(WINDOW_WIDTH, MAIN_WINDOW_HEIGHT),
+    resizable=False,
+    icon=os.path.join(getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__))), 'feet.ico')
+)
 
 
 def change_window_height(height):

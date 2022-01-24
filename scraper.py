@@ -1,6 +1,6 @@
 import re
 import calendar
-from subprocess import CREATE_NO_WINDOW
+import os
 
 import chromedriver_autoinstaller
 
@@ -15,6 +15,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from exception import UserAbortException, RoundNotFoundException
 from window import update_progress, update_driver, update_popup, POPUP_EVENT, POPUP_QUEUE
+
+# Import a Windows specific constant if the current platform is Windows
+if os.name == 'nt':
+    from subprocess import CREATE_NO_WINDOW
 
 # URL constants
 _DOMAIN = 'https://www.playhq.com'
@@ -180,9 +184,15 @@ def _get_htmls_with_js(urls):
     # Initialise chrome driver
     update_progress('Downloading Chrome driver...', _SHALLOW_SCRAPE_LENGTH)
     driver_path = chromedriver_autoinstaller.install()
-    service = Service(driver_path)
-    service.creationflags = CREATE_NO_WINDOW
-    driver = webdriver.Chrome(service=service)
+
+    # Hide the Chrome driver console if on Windows
+    if os.name == 'nt':
+        service = Service(driver_path)
+        service.creationflags = CREATE_NO_WINDOW
+        driver = webdriver.Chrome(service=service)
+    else:
+        driver = webdriver.Chrome()
+
     driver.set_page_load_timeout(_PAGE_LOAD_TIMEOUT)
     update_driver(driver)
 
