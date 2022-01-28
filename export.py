@@ -301,6 +301,21 @@ def _update_row(ws, row, match):
     ws.row_dimensions[row].height = _ROW_HEIGHT
 
 
+def _set_active_worksheet(wb, ws_index):
+    """Sets the active worksheet in an Excel workbook
+
+    Args:
+        wb(Workbook): The workbook
+        ws_index(int): The worksheet index to set as active
+
+    """
+    wb.active = ws_index
+
+    worksheets = wb.worksheets
+    for i, ws in zip(range(len(worksheets)), worksheets):
+        ws.sheet_view.tabSelected = (i == ws_index)
+
+
 def create_excel(roster, template_location, save_location):
     """Creates an Excel document from a roster
 
@@ -339,7 +354,7 @@ def create_excel(roster, template_location, save_location):
                 row += 1
 
     # Set the first worksheet as active
-    wb.active = 0
+    _set_active_worksheet(wb, 0)
 
     # Save and close the worksheet
     filename = date.strftime('%d{} %b %Y').format(_ordinal(date)).lstrip('0') + '.xlsx'
@@ -648,7 +663,7 @@ def update_excel(roster, excel_location):
         f.write(str(match_changes))
 
     # Set the first worksheet as active
-    wb.active = 0
+    _set_active_worksheet(wb, 0)
     
     wb.save(excel_location)
     wb.close()
