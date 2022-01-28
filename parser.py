@@ -68,21 +68,17 @@ def _get_teams(grade_html):
     # Filter out forfeited matches
     teams = []
     for i in range(len(all_teams) // 2):
-        skip = False
         teams_to_add = []
         for j in range(2):
             team = all_teams[i * 2 + j]
             if team.find_next_sibling('span', class_='sc-kEqYlL kTltqj') is not None:
-                skip = True
+                teams_to_add = ['FORFEIT', 'FORFEIT']
                 break
-            teams_to_add.append(team)
-
-        if skip:
-            continue
+            teams_to_add.append(team.text)
 
         teams.extend(teams_to_add)
 
-    return [team.text for team in teams]
+    return teams
 
 
 def _get_time_location_htmls(grade_html):
@@ -221,11 +217,11 @@ def _create_matches(grade_html):
         time = times[i]
         location = locations[i]
         court = courts[i]
-        if time == TBC or location == TBC or court == TBC:
-            continue
-
         team1 = teams[i * 2]
         team2 = teams[i * 2 + 1]
+        if time == TBC or location == TBC or court == TBC or team1 == 'FORFEIT' or team2 == 'FORFEIT':
+            continue
+
         match = Match(grade, team1, team2, time, location, court)
         matches.append(match)
 
