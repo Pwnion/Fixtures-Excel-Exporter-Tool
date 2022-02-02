@@ -372,6 +372,9 @@ def get_excel_date(excel_location):
     wb = load_workbook(excel_location)
     ws = wb.worksheets[0]
     date_string = ws[_DATE_CELL].value
+    if date_string.find('/') == 1:
+        date_string = f'0{date_string}'
+
     wb.close()
     return date_string
 
