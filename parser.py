@@ -115,6 +115,7 @@ def _get_times(grade_html):
             time = TBC
         else:
             time_string = soup.find('span', class_='sc-kEqYlL kjKiYr').text
+            time_string = time_string[:time_string.index(',')]
             time = datetime.strptime(time_string, '%I:%M %p')
 
         times.append(time)
