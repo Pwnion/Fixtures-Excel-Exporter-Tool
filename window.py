@@ -128,7 +128,7 @@ _LAYOUT = [
     _PROGRESS_LAYOUT,
     _MAIN_LAYOUT
 ]
-_VERSION = '1.0.5'
+_VERSION = '1.0.6'
 _TITLE = f'Fixtures Excel Exporter Tool (FEET) v{_VERSION}'
 
 WINDOW = sg.Window(

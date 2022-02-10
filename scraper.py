@@ -15,6 +15,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from exception import UserAbortException, RoundNotFoundException
 from window import update_progress, update_driver, update_popup, POPUP_EVENT, POPUP_QUEUE
+from export import GRADES_TO_SKIP
 
 # Import a Windows specific constant if the current platform is Windows
 if os.name == 'nt':
@@ -152,6 +153,36 @@ def _wait_for_html(driver):
     return driver.page_source
 
 
+def _wait_for_html_error(driver):
+    """Waits for a webpage to load an error, and then returns its HTML
+
+    Args:
+        driver(WebDriver): The driver to use
+
+    Returns:
+        str: The HTML of the webpage
+
+    """
+    loaded_condition = EC.presence_of_element_located((By.CSS_SELECTOR, '.n806zu-0.eOOEPz'))
+    WebDriverWait(driver, _JS_LOAD_TIMEOUT).until(loaded_condition)
+    return driver.page_source
+
+
+def _wait_for_html_unconfirmed(driver):
+    """Waits for a webpage to load an unconfirmed message, and then returns its HTML
+
+    Args:
+        driver(WebDriver): The driver to use
+
+    Returns:
+        str: The HTML of the webpage
+
+    """
+    loaded_condition = EC.presence_of_element_located((By.CSS_SELECTOR, '.n806zu-0.kxpuUz.sc-10c3c88-18.dsJxqP'))
+    WebDriverWait(driver, _JS_LOAD_TIMEOUT).until(loaded_condition)
+    return driver.page_source
+
+
 def _is_saturday_match(grade_html):
     """Checks if a Saturday match has actually been scheduled for Saturday
 
@@ -163,8 +194,19 @@ def _is_saturday_match(grade_html):
 
     """
     soup = BeautifulSoup(grade_html, 'html.parser')
-    date_text = soup.find('span', class_='sc-kEqYlL jndYxC').text
-    return 'saturday' in date_text.lower()
+    date_element = soup.find('span', class_='sc-kEqYlL jndYxC')
+    unconfirmed_element = soup.find('div', class_='n806zu-0 kxpuUz sc-10c3c88-18 dsJxqP')
+    if date_element and not unconfirmed_element:
+        date_text = date_element.text
+        return 'saturday' in date_text.lower()
+
+    grade_text = soup.find('h2', class_='sc-kEqYlL sc-1hg285i-0 eoUoDK hALyVo').text
+    age_start = grade_text.find(' ') + 1
+    age_end = grade_text.find(' ', age_start)
+    section_start = grade_text.find(' ', age_end + 1) + 1
+    grade_text = grade_text[age_start:age_end] + grade_text[section_start:]
+    GRADES_TO_SKIP.append(grade_text)
+    return False
 
 
 # noinspection all
@@ -226,10 +268,18 @@ def _get_htmls_with_js(urls):
             driver.get(urls[i])
             try:
                 htmls.append(_wait_for_html(driver))
-            except TimeoutException as e:
-                driver.quit()
-                update_driver(None)
-                raise e
+            except TimeoutException:
+                driver.get(urls[i])
+                try:
+                    htmls.append(_wait_for_html_error(driver))
+                except TimeoutException:
+                    driver.get(urls[i])
+                    try:
+                        htmls.append(_wait_for_html_unconfirmed(driver))
+                    except TimeoutException as e:
+                        driver.quit()
+                        update_driver(None)
+                        raise e
 
     driver.quit()
     update_driver(None)

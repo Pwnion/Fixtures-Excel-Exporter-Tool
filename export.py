@@ -18,6 +18,8 @@ _GRADE_COLUMN = 'E'
 _REFEREE_COLUMN_1 = 'F'
 _REFEREE_COLUMN_2 = 'G'
 
+GRADES_TO_SKIP = []
+
 
 class _MatchChanges:
     def __init__(self):
@@ -112,79 +114,84 @@ class _MatchChanges:
         added = self.parsed_matches[1]
         removed = self.parsed_matches[2]
         if not moved and not added and not removed:
-            return 'No changes'
+            string += 'No Changes\n\n'
+        else:
+            if moved:
+                string += 'Moved:\n'
+                for matches_pair in moved:
+                    from_match = matches_pair[0][0]
+                    to_match = matches_pair[1][0]
+                    from_place = f'{from_match.location}, {from_match.court}'
+                    to_place = f'{to_match.location}, {to_match.court}'
+                    if len(matches_pair[0]) == 1:
+                        match_string = f'Team \'{from_match.team1}\' ({from_match.grade})'
+                    else:
+                        match_string = f'Match \'{from_match.team1} vs {from_match.team2}\' ({from_match.grade})'
 
-        if moved:
-            string += 'Moved:\n'
-            for matches_pair in moved:
-                from_match = matches_pair[0][0]
-                to_match = matches_pair[1][0]
-                from_place = f'{from_match.location}, {from_match.court}'
-                to_place = f'{to_match.location}, {to_match.court}'
-                if len(matches_pair[0]) == 1:
-                    match_string = f'Team \'{from_match.team1}\' ({from_match.grade})'
-                else:
-                    match_string = f'Match \'{from_match.team1} vs {from_match.team2}\' ({from_match.grade})'
+                    # Add the moved components to the string
+                    if from_match.time != to_match.time and from_place != to_place:
+                        string += (
+                            f'\t{match_string} moved from {from_place} @ '
+                            f'{from_match.time.strftime(_TIME_FORMAT)} to {to_place} @ '
+                            f'{to_match.time.strftime(_TIME_FORMAT)}\n'
+                        )
+                    elif from_place == to_place:
+                        string += (
+                            f'\t{match_string} moved from {from_match.time.strftime(_TIME_FORMAT)} '
+                            f'to {to_match.time.strftime(_TIME_FORMAT)} (Still @ {from_place})\n'
+                        )
+                    elif from_match.time == to_match.time:
+                        match_time = from_match.time.strftime(_TIME_FORMAT)
+                        string += f'\t{match_string} moved from {from_place} to {to_place} (Still @ {match_time})\n'
 
-                # Add the moved components to the string
-                if from_match.time != to_match.time and from_place != to_place:
+                string += '\n'
+
+            if added:
+                string += 'Added:\n'
+                duplicates = []
+                for match in added.values():
+                    if match.team1 in duplicates:
+                        continue
+
+                    if match.team2 in added:
+                        match_string = f'Match \'{match.team1} vs {match.team2}\' ({match.grade})'
+                    else:
+                        match_string = f'Team \'{match.team1}\' ({match.grade})'
+
                     string += (
-                        f'\t{match_string} moved from {from_place} @ '
-                        f'{from_match.time.strftime(_TIME_FORMAT)} to {to_place} @ '
-                        f'{to_match.time.strftime(_TIME_FORMAT)}\n'
+                        f'\t{match_string} was added to {match.location}, {match.court} '
+                        f'@ {match.time.strftime(_TIME_FORMAT)}\n'
                     )
-                elif from_place == to_place:
+
+                    duplicates.append(match.team2)
+
+                string += '\n'
+
+            if removed:
+                string += 'Removed:\n'
+                duplicates = []
+                for match in removed.values():
+                    if match.team1 in duplicates:
+                        continue
+
+                    if match.team2 in removed:
+                        match_string = f'Match \'{match.team1} vs {match.team2}\' ({match.grade})'
+                    else:
+                        match_string = f'Team \'{match.team1}\' ({match.grade})'
+
                     string += (
-                        f'\t{match_string} moved from {from_match.time.strftime(_TIME_FORMAT)} '
-                        f'to {to_match.time.strftime(_TIME_FORMAT)} (Still @ {from_place})\n'
+                        f'\t{match_string} was removed from {match.location}, {match.court} '
+                        f'@ {match.time.strftime(_TIME_FORMAT)}\n'
                     )
-                elif from_match.time == to_match.time:
-                    match_time = from_match.time.strftime(_TIME_FORMAT)
-                    string += f'\t{match_string} moved from {from_place} to {to_place} (Still @ {match_time})\n'
 
-            string += '\n'
+                    duplicates.append(match.team2)
 
-        if added:
-            string += 'Added:\n'
-            duplicates = []
-            for match in added.values():
-                if match.team1 in duplicates:
-                    continue
+                string += '\n'
 
-                if match.team2 in added:
-                    match_string = f'Match \'{match.team1} vs {match.team2}\' ({match.grade})'
-                else:
-                    match_string = f'Team \'{match.team1}\' ({match.grade})'
-
-                string += (
-                    f'\t{match_string} was added to {match.location}, {match.court} '
-                    f'@ {match.time.strftime(_TIME_FORMAT)}\n'
-                )
-
-                duplicates.append(match.team2)
-
-            string += '\n'
-
-        if removed:
-            string += 'Removed:\n'
-            duplicates = []
-            for match in removed.values():
-                if match.team1 in duplicates:
-                    continue
-
-                if match.team2 in removed:
-                    match_string = f'Match \'{match.team1} vs {match.team2}\' ({match.grade})'
-                else:
-                    match_string = f'Team \'{match.team1}\' ({match.grade})'
-
-                string += (
-                    f'\t{match_string} was removed from {match.location}, {match.court} '
-                    f'@ {match.time.strftime(_TIME_FORMAT)}\n'
-                )
-
-                duplicates.append(match.team2)
-
-            string += '\n'
+        if GRADES_TO_SKIP:
+            string += '\nNotes:'
+            for grade in GRADES_TO_SKIP:
+                string += f'\n\tMatches from {grade} could not be loaded due to an error on the webpage'
 
         return string
 
@@ -598,33 +605,36 @@ def update_excel(roster, excel_location):
             else:
                 excel_time = datetime.strptime(excel_time_cell.value, _TIME_FORMAT)
 
+            # Values for each relevant cell in the current excel row
+            excel_team1 = ws[f'{_TEAM_1_COLUMN}{excel_row}']
+            excel_team2 = ws[f'{_TEAM_2_COLUMN}{excel_row}']
+            excel_grade = ws[f'{_GRADE_COLUMN}{excel_row}']
+            excel_team1_text = str(excel_team1.value)
+            excel_team2_text = str(excel_team2.value)
+            excel_grade_text = str(excel_grade.value)
+
             # Check if comparing the same time slot
             if data_time == excel_time:
-                # Values for each relevant cell in the current excel row
-                excel_team1 = ws[f'{_TEAM_1_COLUMN}{excel_row}']
-                excel_team2 = ws[f'{_TEAM_2_COLUMN}{excel_row}']
-                excel_grade = ws[f'{_GRADE_COLUMN}{excel_row}']
-                excel_team1_text = str(excel_team1.value)
-                excel_team2_text = str(excel_team2.value)
-                excel_grade_text = str(excel_grade.value)
                 removed_match = _excel_row_to_match(ws, excel_row, location, excel_court)
 
                 # Compare team 1
                 if data_match.team1 != excel_team1_text:
-                    if excel_team1_text != 'FORFEIT':
-                        match_changes.remove(removed_match, half=True)
-                    else:
-                        _clear_row_as_forfeit(ws, excel_row)
+                    if excel_team1.value is not None:
+                        if excel_team1_text != 'FORFEIT':
+                            match_changes.remove(removed_match, half=True)
+                        else:
+                            _clear_row_as_forfeit(ws, excel_row)
 
                     match_changes.add(data_match, half=True)
                     excel_team1.value = data_match.team1
 
                 # Compare team 2
                 if data_match.team2 != excel_team2_text:
-                    if excel_team2_text != 'FORFEIT':
-                        match_changes.remove(removed_match, half=True, flip=True)
-                    else:
-                        _clear_row_as_forfeit(ws, excel_row)
+                    if excel_team2.value is not None:
+                        if excel_team2_text != 'FORFEIT':
+                            match_changes.remove(removed_match, half=True, flip=True)
+                        else:
+                            _clear_row_as_forfeit(ws, excel_row)
 
                     match_changes.add(data_match, half=True, flip=True)
                     excel_team2.value = data_match.team2
@@ -645,10 +655,13 @@ def update_excel(roster, excel_location):
                         data_row += 1
                         excel_row += 1
                 else:
-                    match = _excel_row_to_match(ws, excel_row, location, excel_court)
-                    if match.team1 != 'FORFEIT':
-                        _label_row_as_forfeit(ws, excel_row)
-                        match_changes.remove(match)
+                    if excel_grade_text in GRADES_TO_SKIP or excel_grade.value is None:
+                        excel_team1.value = excel_team2.value = excel_grade.value = ''
+                    else:
+                        match = _excel_row_to_match(ws, excel_row, location, excel_court)
+                        if match.team1 != 'FORFEIT':
+                            _label_row_as_forfeit(ws, excel_row)
+                            match_changes.remove(match)
 
                     excel_row += 1
 
