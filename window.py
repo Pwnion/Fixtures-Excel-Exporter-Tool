@@ -1,18 +1,23 @@
 import PySimpleGUI as sg
 import os
 import sys
+import calendar
 
-from threading import Event
-from queue import Queue
+from datetime import datetime, timedelta
 
 # Window constants
 WINDOW_WIDTH = 760
-MAIN_WINDOW_HEIGHT = 200
+MAIN_WINDOW_CREATE_HEIGHT = 250
+MAIN_WINDOW_UPDATE_HEIGHT = 180
+WINDOW_TAB_GROUP_DIFF = 110
+TAB_GROUP_CREATE_HEIGHT = MAIN_WINDOW_CREATE_HEIGHT - WINDOW_TAB_GROUP_DIFF
+TAB_GROUP_UPDATE_HEIGHT = MAIN_WINDOW_UPDATE_HEIGHT - WINDOW_TAB_GROUP_DIFF
 PROGRESS_WINDOW_HEIGHT = 100
 PROGRESS_WINDOW_HEIGHT_WITH_OPTIONS = 150
 MAIN_COLUMN_KEY = '-MAIN COLUMN-'
 TEMPLATE_DOCUMENT_KEY = '-TEMPLATE DOCUMENT TEXT-'
 OUTPUT_FOLDER_KEY = '-OUTPUT FOLDER TEXT-'
+CALENDAR_KEY = '-CALENDAR TEXT-'
 UPDATE_DOCUMENT_KEY = '-UPDATE DOCUMENT TEXT-'
 TAB_GROUP_KEY = '-TAB GROUP-'
 PROCESS_BUTTON_KEY = '-PROCESS BUTTON-'
@@ -25,7 +30,6 @@ PROGRESS_RESTART_BUTTON_KEY = '-PROGRESS RESTART BUTTON-'
 PROGRESS_EXIT_BUTTON_KEY = '-PROGRESS EXIT BUTTON-'
 THREAD_PROGRESS_EVENT = '-THREAD PROGRESS-'
 THREAD_DRIVER_EVENT = '-THREAD DRIVER-'
-THREAD_POPUP_EVENT = '-THREAD POPUP-'
 ERROR_EVENT = '-ERROR-'
 WINDOW_EXIT_EVENT = 'Exit'
 CREATE_TAB = 'Create'
@@ -35,109 +39,21 @@ RETRY_UTILITY = 'Retry'
 PROGRESS_BAR_COLOUR = ('green', 'white')
 PROGRESS_BAR_ERROR_COLOUR = ('#8b0000', '#8b0000')
 
-# Variables for helping to handle popups in different threads
-POPUP_EVENT = Event()
-POPUP_QUEUE = Queue()
 
-# Window layouts and elements
-_TEMPLATE_ROW_1 = [
-    sg.Text('Template Document:', size=(18, 1)),
-    sg.In(
-        os.getcwd().replace('\\', '/') + '/resources/template.xlsx',
-        key=TEMPLATE_DOCUMENT_KEY,
-        size=(60, 1),
-        disabled=True,
-        enable_events=True
-    ),
-    sg.FileBrowse(file_types=(('Excel Documents', '*.xlsx'),))
-]
-_OUTPUT_ROW_1 = [
-    sg.Text('Output Folder:', size=(18, 1)),
-    sg.In(key=OUTPUT_FOLDER_KEY, size=(60, 1), disabled=True, enable_events=True),
-    sg.FolderBrowse()
-]
-_SYNC_ROW_2 = [
-    sg.Text('Document to Update:', size=(18, 1)),
-    sg.In(key=UPDATE_DOCUMENT_KEY, size=(60, 1), disabled=True, enable_events=True),
-    sg.FileBrowse(file_types=(('Excel Documents', '*.xlsx'),))
-]
-_MAIN_COLUMN_1 = [
-    _TEMPLATE_ROW_1,
-    _OUTPUT_ROW_1
-]
-_MAIN_COLUMN_2 = [
-    _SYNC_ROW_2
-]
-_TAB_GROUP_ROW = [
-    sg.TabGroup([[
-        sg.Tab('Create', [[sg.Column(_MAIN_COLUMN_1, pad=15)]], expand_x=True, expand_y=True),
-        sg.Tab('Update', [[sg.Column(_MAIN_COLUMN_2, pad=30)]], expand_x=True, expand_y=True)
-    ]], key=TAB_GROUP_KEY, tab_location='center', enable_events=True)
-]
-_PROCESS_ROW = [
-    sg.Button('Process', key=PROCESS_BUTTON_KEY, size=(10, 2), disabled=True)
-]
-_MAIN_COLUMN = [
-    _TAB_GROUP_ROW,
-    _PROCESS_ROW
-]
-_MAIN_LAYOUT = [
-    sg.Column(
-        _MAIN_COLUMN,
-        key=MAIN_COLUMN_KEY,
-        element_justification='center',
-        expand_x=True,
-        expand_y=True
-    )
-]
-_PROGRESS_TEXT_ROW = [
-    sg.Text(key=PROGRESS_TEXT_KEY, text='Initialising...')
-]
-_PROGRESS_BAR_ROW = [
-    sg.ProgressBar(key=PROGRESS_BAR_KEY, max_value=100, size=(60, 30), bar_color=PROGRESS_BAR_COLOUR)
-]
-_PROGRESS_OPTIONS_ROW = [
-    sg.Button(key=PROGRESS_UTILITY_BUTTON_KEY, size=(13, 2), pad=((0, 5), (15, 0)), enable_events=True),
-    sg.Button('Restart', key=PROGRESS_RESTART_BUTTON_KEY, size=(13, 2), pad=((5, 5), (15, 0)), enable_events=True),
-    sg.Button('Exit', key=PROGRESS_EXIT_BUTTON_KEY, size=(13, 2), pad=((5, 0), (15, 0)), enable_events=True)
-]
-_PROGRESS_INFO_COLUMN = [
-    _PROGRESS_TEXT_ROW,
-    _PROGRESS_BAR_ROW,
-]
-_PROGRESS_OPTIONS_COLUMN = [
-    _PROGRESS_OPTIONS_ROW
-]
-_PROGRESS_LAYOUT = [
-    sg.Column(
-        _PROGRESS_INFO_COLUMN,
-        key=PROGRESS_COLUMN_KEY,
-        expand_x=True,
-        element_justification='center',
-        visible=False
-    ),
-    sg.Column(
-        _PROGRESS_OPTIONS_COLUMN,
-        key=PROGRESS_OPTIONS_KEY,
-        expand_x=True,
-        element_justification='center',
-        visible=False
-    )
-]
-_LAYOUT = [
-    _PROGRESS_LAYOUT,
-    _MAIN_LAYOUT
-]
-_VERSION = '1.0.6'
-_TITLE = f'Fixtures Excel Exporter Tool (FEET) v{_VERSION}'
+def _next_saturday(as_string):
+    """Get the date of next Saturday
 
-WINDOW = sg.Window(
-    _TITLE,
-    _LAYOUT,
-    size=(WINDOW_WIDTH, MAIN_WINDOW_HEIGHT),
-    resizable=False,
-    icon=os.path.join(getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__))), 'feet.ico')
-)
+    Returns:
+        tuple: The date of next saturday
+
+    """
+    now = datetime.now()
+    saturday_delta = timedelta((calendar.SATURDAY - now.weekday()) % 7)
+    saturday_datetime = now + saturday_delta
+    if as_string:
+        return saturday_datetime.strftime('%d/%m/%Y')
+
+    return saturday_datetime.month, saturday_datetime.day, saturday_datetime.year
 
 
 def change_window_height(height):
@@ -217,30 +133,115 @@ def update_error(error_msg):
     WINDOW.write_event_value(ERROR_EVENT, error_msg)
 
 
-def update_popup(title, text):
-    """Sends an event to the window to create a popup
+# Window layouts and elements
+_TEMPLATE_ROW_1 = [
+    sg.Text('Template Document:', size=(18, 1)),
+    sg.In(
+        os.getcwd().replace('\\', '/') + '/resources/template.xlsx',
+        key=TEMPLATE_DOCUMENT_KEY,
+        size=(60, 1),
+        disabled=True,
+        enable_events=True
+    ),
+    sg.FileBrowse(file_types=(('Excel Documents', '*.xlsx'),))
+]
+_OUTPUT_ROW_1 = [
+    sg.Text('Output Folder:', size=(18, 1)),
+    sg.In(key=OUTPUT_FOLDER_KEY, size=(60, 1), disabled=True, enable_events=True),
+    sg.FolderBrowse()
+]
+_CALENDAR_ROW_1 = [
+    sg.Text('', expand_x=True),
+    sg.In(
+        _next_saturday(True),
+        key=CALENDAR_KEY,
+        size=(11, 1),
+        justification='center',
+        disabled=True
+    ),
+    sg.CalendarButton('Choose Date', target=CALENDAR_KEY, format='%d/%m/%Y', default_date_m_d_y=_next_saturday(False)),
+    sg.Text('', expand_x=True),
+]
+_UPDATE_ROW_2 = [
+    sg.Text('Document to Update:', size=(18, 1)),
+    sg.In(key=UPDATE_DOCUMENT_KEY, size=(60, 1), disabled=True, enable_events=True),
+    sg.FileBrowse(file_types=(('Excel Documents', '*.xlsx'),))
+]
+_MAIN_COLUMN_1 = [
+    _TEMPLATE_ROW_1,
+    _OUTPUT_ROW_1,
+    _CALENDAR_ROW_1
+]
+_MAIN_COLUMN_2 = [
+    _UPDATE_ROW_2
+]
+_TAB_GROUP_ROW = [
+    sg.TabGroup([[
+        sg.Tab('Create', [[sg.Column(_MAIN_COLUMN_1, pad=15)]], expand_x=True, expand_y=True),
+        sg.Tab('Update', [[sg.Column(_MAIN_COLUMN_2, pad=15)]], expand_x=True)
+    ]], key=TAB_GROUP_KEY, tab_location='center', enable_events=True)
+]
+_PROCESS_ROW = [
+    sg.Button('Process', key=PROCESS_BUTTON_KEY, size=(10, 2), disabled=True)
+]
+_MAIN_COLUMN = [
+    _TAB_GROUP_ROW,
+    _PROCESS_ROW
+]
+_MAIN_LAYOUT = [
+    sg.Column(
+        _MAIN_COLUMN,
+        key=MAIN_COLUMN_KEY,
+        element_justification='center',
+        expand_x=True,
+        expand_y=True
+    )
+]
+_PROGRESS_TEXT_ROW = [
+    sg.Text(key=PROGRESS_TEXT_KEY, text='Initialising...')
+]
+_PROGRESS_BAR_ROW = [
+    sg.ProgressBar(key=PROGRESS_BAR_KEY, max_value=100, size=(60, 30), bar_color=PROGRESS_BAR_COLOUR)
+]
+_PROGRESS_OPTIONS_ROW = [
+    sg.Button(key=PROGRESS_UTILITY_BUTTON_KEY, size=(13, 2), pad=((0, 5), (15, 0)), enable_events=True),
+    sg.Button('Restart', key=PROGRESS_RESTART_BUTTON_KEY, size=(13, 2), pad=((5, 5), (15, 0)), enable_events=True),
+    sg.Button('Exit', key=PROGRESS_EXIT_BUTTON_KEY, size=(13, 2), pad=((5, 0), (15, 0)), enable_events=True)
+]
+_PROGRESS_INFO_COLUMN = [
+    _PROGRESS_TEXT_ROW,
+    _PROGRESS_BAR_ROW,
+]
+_PROGRESS_OPTIONS_COLUMN = [
+    _PROGRESS_OPTIONS_ROW
+]
+_PROGRESS_LAYOUT = [
+    sg.Column(
+        _PROGRESS_INFO_COLUMN,
+        key=PROGRESS_COLUMN_KEY,
+        expand_x=True,
+        element_justification='center',
+        visible=False
+    ),
+    sg.Column(
+        _PROGRESS_OPTIONS_COLUMN,
+        key=PROGRESS_OPTIONS_KEY,
+        expand_x=True,
+        element_justification='center',
+        visible=False
+    )
+]
+_LAYOUT = [
+    _PROGRESS_LAYOUT,
+    _MAIN_LAYOUT
+]
+_VERSION = '1.0.7'
+_TITLE = f'Fixtures Excel Exporter Tool (FEET) v{_VERSION}'
 
-    Args:
-        title(str): The title of the popup
-        text(str): The text to display in the popup
-
-    """
-    WINDOW.write_event_value(THREAD_POPUP_EVENT, (title, text))
-
-
-def display_yes_no_popup(title, text):
-    """Display a popup with the yes/no options
-
-    Args:
-        title(str): The title of the popup
-        text(str): The text to display in the popup
-
-    Returns:
-        bool: True if clicked yes, otherwise false
-
-    """
-    global POPUP_EVENT, POPUP_QUEUE
-
-    response = sg.popup_yes_no(text, title=title, keep_on_top=True, modal=False)
-    POPUP_QUEUE.put(False if response == sg.WIN_CLOSED else (response == 'Yes'))
-    POPUP_EVENT.set()
+WINDOW = sg.Window(
+    _TITLE,
+    _LAYOUT,
+    size=(WINDOW_WIDTH, MAIN_WINDOW_CREATE_HEIGHT),
+    resizable=False,
+    icon=os.path.join(getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__))), 'feet.ico')
+)

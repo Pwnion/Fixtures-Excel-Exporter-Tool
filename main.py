@@ -2,14 +2,18 @@ import subprocess
 
 from threading import Thread
 from window import *
-from exception import UserAbortException, RoundNotFoundException
+from exception import RoundNotFoundException
 from scraper import get_all_grade_htmls
 from parser import create_roster
 from export import create_excel, get_excel_date, update_excel
 
 
-def _create_roster(date_string=None):
+def _create_roster(date_string, create):
     """Create the roster
+
+    Args:
+        date_string(str): The date of the roster
+        create(bool): Whether an Excel document is being created or updated
 
     Returns:
         Roster: The created roster
@@ -20,9 +24,6 @@ def _create_roster(date_string=None):
     # Scrape the fixtures page
     try:
         grade_htmls = get_all_grade_htmls(date_string)
-    except UserAbortException as e:
-        update_error('User aborted')
-        raise e
     except RoundNotFoundException as e:
         update_error(f'Could not update Excel document (data not found for {str(e)})')
         raise e
@@ -31,7 +32,7 @@ def _create_roster(date_string=None):
         raise e
 
     # Change the progress message depending on creation or updating
-    if date_string is None:
+    if create:
         update_msg = 'Parsing the data into an Excel document...'
     else:
         update_msg = 'Updating the Excel document...'
@@ -56,7 +57,8 @@ def _create(values):
 
     """
     # Create the roster
-    roster = _create_roster()
+    date_string = values[CALENDAR_KEY]
+    roster = _create_roster(date_string, True)
 
     # Get template location and output folder location from window values
     template_location = values[TEMPLATE_DOCUMENT_KEY]
@@ -85,7 +87,7 @@ def _update(values):
 
     # Create the roster
     date_string = get_excel_date(excel_location)
-    roster = _create_roster(date_string)
+    roster = _create_roster(date_string, False)
 
     # Update the Excel document
     try:
@@ -154,11 +156,6 @@ def _handle_window():
             if event == THREAD_DRIVER_EVENT:
                 driver = values[THREAD_DRIVER_EVENT]
 
-            # Receive a request to display a popup
-            if event == THREAD_POPUP_EVENT:
-                popup_info = values[THREAD_POPUP_EVENT]
-                display_yes_no_popup(popup_info[0], popup_info[1])
-
             continue
 
         # Receive events from the progress window
@@ -192,6 +189,12 @@ def _handle_window():
         # Get the currently selected tab
         if event == TAB_GROUP_KEY:
             curr_tab = tab_group.get()
+            if curr_tab == CREATE_TAB:
+                WINDOW[TAB_GROUP_KEY].set_size(size=(None, TAB_GROUP_CREATE_HEIGHT))
+                change_window_height(MAIN_WINDOW_CREATE_HEIGHT)
+            elif curr_tab == UPDATE_TAB:
+                WINDOW[TAB_GROUP_KEY].set_size(size=(None, TAB_GROUP_UPDATE_HEIGHT))
+                change_window_height(MAIN_WINDOW_UPDATE_HEIGHT)
 
             # Clear the input widgets being highlighted on tab change
             WINDOW[TEMPLATE_DOCUMENT_KEY if curr_tab == CREATE_TAB else UPDATE_DOCUMENT_KEY].Widget.select_clear()

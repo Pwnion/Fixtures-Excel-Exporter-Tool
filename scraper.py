@@ -1,10 +1,9 @@
 import re
-import calendar
 import os
 
 import chromedriver_autoinstaller
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from requests_html import HTMLSession
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -13,8 +12,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from exception import UserAbortException, RoundNotFoundException
-from window import update_progress, update_driver, update_popup, POPUP_EVENT, POPUP_QUEUE
+from exception import RoundNotFoundException
+from window import update_progress, update_driver
 from export import GRADES_TO_SKIP
 
 # Import a Windows specific constant if the current platform is Windows
@@ -330,7 +329,7 @@ def _get_grade_dates(grade_html):
     return dates
 
 
-def _transform_grade_urls(grade_urls, date_string=None):
+def _transform_grade_urls(grade_urls, date_string):
     """Make sure the grade urls have the correct date
 
     Args:
@@ -344,42 +343,31 @@ def _transform_grade_urls(grade_urls, date_string=None):
     grade_htmls = _get_grade_htmls([f'{grade_url}/R1' for grade_url in grade_urls])
     dates = [_get_grade_dates(grade_html) for grade_html in grade_htmls]
 
-    # If a date string is specified, get the grade URLs for that date instead
-    if date_string is not None:
-        if date_string not in dates[0]:
-            raise RoundNotFoundException(date_string)
+    # Verify that there is at least one grade playing on the date specified
+    round_not_found = True
+    for date_strings in dates:
+        if date_string in date_strings:
+            round_not_found = False
+            break
 
-        round_indices = [dates_.index(date_string) for dates_ in dates]
-        return [_get_grade_url_by_round(grade_htmls[i], round_indices[i]) for i in range(len(grade_htmls))]
+    if round_not_found:
+        raise RoundNotFoundException(date_string)
 
-    # Check if the date on the webpage is next Saturday
-    now = datetime.now()
-    saturday_delta = timedelta((calendar.SATURDAY - now.weekday()) % 7)
-    saturday_datetime = now + saturday_delta
-    saturday_date_string = saturday_datetime.strftime('%d/%m/%Y')
+    round_indices = []
+    index = 0
+    for dates_ in dates:
+        if date_string not in dates_:
+            grade_htmls.pop(index)
+            continue
 
-    # If there is a round with the correct date, use it
-    if saturday_date_string in dates[0]:
-        round_indices = [dates_.index(saturday_date_string) for dates_ in dates]
-        return [_get_grade_url_by_round(grade_htmls[i], round_indices[i]) for i in range(len(grade_htmls))]
+        date_index = dates_.index(date_string)
+        round_indices.append(date_index)
+        index += 1
 
-    # Determine whether to continue based on user input
-    update_progress('Waiting for user input...', _SHALLOW_SCRAPE_LENGTH)
-    update_popup(
-        'Warning',
-        f'Data cannot be found for next Saturday ({saturday_date_string}).\n'
-        f'Do you want to continue with the latest available data? ({dates[0][-1]})'
-    )
-    POPUP_EVENT.wait()
-    POPUP_EVENT.clear()
-    if not POPUP_QUEUE.get():
-        raise UserAbortException()
-
-    # Get the grade URLs for the latest round
-    return [_get_grade_url_by_round(grade_htmls[i], -1) for i in range(len(grade_htmls))]
+    return [_get_grade_url_by_round(grade_htmls[i], round_indices[i]) for i in range(len(grade_htmls))]
 
 
-def get_all_grade_htmls(date_string=None):
+def get_all_grade_htmls(date_string):
     """Gets the HTML of all required grade pages
 
     Returns:
