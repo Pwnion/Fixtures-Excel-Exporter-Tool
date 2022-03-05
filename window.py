@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 WINDOW_WIDTH = 760
 MAIN_WINDOW_CREATE_HEIGHT = 250
 MAIN_WINDOW_UPDATE_HEIGHT = 180
-WINDOW_TAB_GROUP_DIFF = 110
+WINDOW_TAB_GROUP_DIFF = 115
 TAB_GROUP_CREATE_HEIGHT = MAIN_WINDOW_CREATE_HEIGHT - WINDOW_TAB_GROUP_DIFF
 TAB_GROUP_UPDATE_HEIGHT = MAIN_WINDOW_UPDATE_HEIGHT - WINDOW_TAB_GROUP_DIFF
 PROGRESS_WINDOW_HEIGHT = 100
@@ -159,7 +159,13 @@ _CALENDAR_ROW_1 = [
         justification='center',
         disabled=True
     ),
-    sg.CalendarButton('Choose Date', target=CALENDAR_KEY, format='%d/%m/%Y', default_date_m_d_y=_next_saturday(False)),
+    sg.CalendarButton(
+        'Choose Date',
+        target=CALENDAR_KEY,
+        format='%d/%m/%Y',
+        default_date_m_d_y=_next_saturday(False),
+        no_titlebar=False
+    ),
     sg.Text('', expand_x=True),
 ]
 _UPDATE_ROW_2 = [
