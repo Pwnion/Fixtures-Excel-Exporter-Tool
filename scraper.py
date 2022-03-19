@@ -63,7 +63,7 @@ def _url_to_grade(grade_url):
     """
     search_term = 'saturday'
     start = grade_url.find(search_term) + len(search_term) + 1
-    end = grade_url.find('/', start)
+    end = grade_url.find('/', start) if 'reserve' not in grade_url else grade_url.find('-reserve', start) - 1
     grade_section = grade_url[start:end]
     grade = grade_section.replace('-', ' ').title()
     return grade

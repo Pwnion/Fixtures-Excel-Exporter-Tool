@@ -33,6 +33,11 @@ def _format_grade(grade):
     age_start = grade.find(' ') + 1
     age_end = grade.find(' ', age_start)
     section_start = grade.find(' ', age_end + 1) + 1
+    if 'reserve' in grade.lower():
+        section_end = grade.find('/', section_start)
+        section = grade[section_start:section_end]
+        return f'{grade[age_start:age_end]}{section}/{section[0]}R'
+
     return grade[age_start:age_end] + grade[section_start:]
 
 
