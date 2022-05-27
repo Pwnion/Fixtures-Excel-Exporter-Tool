@@ -68,10 +68,14 @@ def _get_teams(grade_html):
     """
     soup = BeautifulSoup(grade_html, 'html.parser')
     matches_element = soup.find('ul', class_='sc-10c3c88-4 iEXxNO')
-    all_teams = matches_element.find_all('a', class_='sc-kEqYlL sc-10c3c88-13 gYjcIn johWCg')
+
+    all_teams = matches_element.find_all('span', class_='sc-kEqYlL sc-10c3c88-13 gYjcIn iPkdqZ')
+    if len(all_teams) > 0:
+        return [''] * len(all_teams)
 
     # Filter out forfeited matches
     teams = []
+    all_teams = matches_element.find_all('a', class_='sc-kEqYlL sc-10c3c88-13 gYjcIn johWCg')
     for i in range(len(all_teams) // 2):
         teams_to_add = []
         for j in range(2):
@@ -79,7 +83,9 @@ def _get_teams(grade_html):
             if team.find_next_sibling('span', class_='sc-kEqYlL kTltqj') is not None:
                 teams_to_add = ['FORFEIT', 'FORFEIT']
                 break
-            teams_to_add.append(team.text)
+
+            team = team.text
+            teams_to_add.append(team if 'Ladder Position' not in team and 'Winner Game' not in team else '')
 
         teams.extend(teams_to_add)
 
